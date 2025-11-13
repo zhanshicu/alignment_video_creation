@@ -1,0 +1,103 @@
+# Default Configuration for Attention-Keyword-Aligned Video Ad Framework
+
+# Model Configuration
+model:
+  sd_model_name: "runwayml/stable-diffusion-v1-5"
+  use_lora: false
+  lora_rank: 4
+
+  controlnet:
+    control_channels: 2  # 2 for [M_t, S_t], 4 for [M_t, S_t, A_t, K_t]
+    base_channels: 64
+    channel_mult: [1, 2, 4, 8]
+    num_res_blocks: 2
+    attention_resolutions: [4, 2, 1]
+    sd_channels: [320, 640, 1280, 1280]
+
+# Data Configuration
+data:
+  data_root: "./data"
+  frames_dir: "frames"
+  attention_dir: "attention_heatmaps"
+  keyword_dir: "keyword_heatmaps"
+  keywords_file: "keywords.json"
+  image_size: [512, 512]
+  include_raw_maps: false
+
+# Attention Heatmap Generation
+attention:
+  patch_degrees: [3, 7]
+  overlap: 0.1
+  fov: 90.0
+  sigma: 5.0
+  gamma: 3.0
+
+# Keyword Heatmap Generation
+keyword:
+  model_name: "CIDAS/clipseg-rd64-refined"
+  threshold: 0.5
+  soften: false
+  soften_sigma: 3.0
+
+# Training Configuration
+training:
+  batch_size: 4
+  num_epochs: 100
+  learning_rate: 1.0e-4
+  num_workers: 4
+
+  # Loss weights
+  lambda_recon: 1.0
+  lambda_lpips: 1.0
+  lambda_bg: 0.5
+  use_recon_loss: false  # Set true for full reconstruction
+
+  # Optimization
+  gradient_accumulation_steps: 1
+  mixed_precision: true
+
+  # Logging
+  log_wandb: false
+  project_name: "attention-keyword-alignment"
+
+  # Checkpointing
+  output_dir: "./outputs"
+  save_every_n_epochs: 10
+
+# Video Editing Configuration
+video_editing:
+  num_inference_steps: 50
+  guidance_scale: 7.5
+  strength: 0.8
+  keyframe_interval: 4
+
+  # Temporal consistency
+  temporal_method: "optical_flow"  # optical_flow, rerender, ebsynth
+  blend_window: 5
+
+# Experimental Variants
+experiments:
+  boost_alpha: 1.5
+  reduction_alpha: 0.5
+  window_type: "thirds"  # thirds, halves, custom
+
+  variants:
+    - baseline
+    - early_boost
+    - middle_boost
+    - late_boost
+    - full_boost
+    - reduction
+    - placebo
+
+# Evaluation
+evaluation:
+  metrics:
+    - mean_alignment
+    - temporal_consistency
+    - spatial_overlap
+
+  visualization:
+    save_heatmaps: true
+    save_videos: true
+    create_comparisons: true
