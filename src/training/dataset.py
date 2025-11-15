@@ -177,12 +177,14 @@ class VideoAdDataset(Dataset):
 
         return {
             'image': image,
-            'control_tensor': control_tensor,
+            'control': control_tensor,  # Changed from 'control_tensor' to match notebook
+            'control_tensor': control_tensor,  # Keep for backward compatibility
             'attention_map': attention_map,
             'keyword_map': keyword_map,
             'keyword_mask': keyword_mask,
             'background_mask': background_mask,
-            'keyword_text': sample_info['keyword_text'],
+            'keyword': sample_info['keyword_text'],  # Changed from 'keyword_text' to match notebook
+            'keyword_text': sample_info['keyword_text'],  # Keep for backward compatibility
             'video_id': sample_info['video_id'],
             'frame_name': sample_info['frame_name'],
         }
