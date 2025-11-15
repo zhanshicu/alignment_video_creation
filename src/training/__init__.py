@@ -7,7 +7,7 @@ from .losses import (
     BackgroundPreservationLoss,
     TotalLoss
 )
-from .dataset import VideoAdDataset
+from .dataset import VideoAdDataset, VideoAdDataModule
 
 __all__ = [
     "ControlNetTrainer",
@@ -16,4 +16,5 @@ __all__ = [
     "BackgroundPreservationLoss",
     "TotalLoss",
     "VideoAdDataset",
+    "VideoAdDataModule",
 ]
