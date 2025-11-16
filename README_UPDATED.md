@@ -71,9 +71,28 @@ Or run the example script:
 python examples/prepare_dataset.py
 ```
 
-### 3. Preprocess Data: Generate Keyword Masks
+### 3. Prepare Data Files
 
-Since we don't have raw keyword heatmaps, we use CLIPSeg to generate spatial masks:
+You have two options:
+
+#### Option A: Create Dummy Test Data (for testing the pipeline)
+
+If you don't have the actual screenshots, create dummy test data:
+
+```bash
+python scripts/create_dummy_data.py --num_videos 5
+```
+
+This creates synthetic screenshots and keyword masks for 5 videos. The images will have:
+- Gradient backgrounds
+- Colored rectangles (simulating products)
+- Corresponding binary masks
+
+**Use this for:** Testing the pipeline, debugging, quick experimentation
+
+#### Option B: Generate Real Keyword Masks (for production)
+
+If you have the actual screenshots in `data/screenshots_tiktok/`, use CLIPSeg to generate keyword masks:
 
 ```bash
 python scripts/generate_keyword_masks.py \
@@ -84,7 +103,9 @@ python scripts/generate_keyword_masks.py \
     --threshold 0.4
 ```
 
-This creates binary masks showing where the product appears in each scene.
+This uses CLIPSeg to segment products and create binary masks showing where the product appears in each scene.
+
+**Use this for:** Production training with real data
 
 ### 4. Train ControlNet Model
 
