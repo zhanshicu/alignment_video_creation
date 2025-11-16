@@ -99,46 +99,71 @@ class ControlTensorBuilder:
 
     def build_control_tensor(
         self,
-        attention_map: np.ndarray,
-        keyword_map: np.ndarray,
+        attention_map: np.ndarray = None,
+        keyword_map: np.ndarray = None,
         keyword_mask: Optional[np.ndarray] = None,
-        alignment_map: Optional[np.ndarray] = None
+        alignment_map: Optional[np.ndarray] = None,
+        alignment_score: Optional[float] = None
     ) -> np.ndarray:
         """
         Build control tensor C_t.
 
+        Two modes:
+        1. With heatmaps: attention_map and keyword_map provided
+        2. With alignment score: keyword_mask and alignment_score provided
+
         Args:
-            attention_map: Attention heatmap A_t (H, W)
-            keyword_map: Keyword heatmap K_t (H, W)
+            attention_map: Attention heatmap A_t (H, W) [optional]
+            keyword_map: Keyword heatmap K_t (H, W) [optional]
             keyword_mask: Optional pre-computed keyword mask M_t
             alignment_map: Optional pre-computed alignment map S_t
+            alignment_score: Scalar alignment score (0-1) [optional]
 
         Returns:
             Control tensor C_t (H, W, C) where C=2 or 4
         """
-        # Compute mask if not provided
-        if keyword_mask is None:
-            keyword_mask = self.compute_keyword_mask(keyword_map)
+        # Mode 1: Build from heatmaps
+        if attention_map is not None and keyword_map is not None:
+            # Compute mask if not provided
+            if keyword_mask is None:
+                keyword_mask = self.compute_keyword_mask(keyword_map)
 
-        # Compute alignment if not provided
-        if alignment_map is None:
-            alignment_map = self.compute_alignment_map(attention_map, keyword_map)
+            # Compute alignment if not provided
+            if alignment_map is None:
+                alignment_map = self.compute_alignment_map(attention_map, keyword_map)
 
-        # Stack channels
-        if self.include_raw_maps:
-            # C_t = [M_t, S_t, A_t, K_t]
-            control_tensor = np.stack([
-                keyword_mask,
-                alignment_map,
-                attention_map,
-                keyword_map
-            ], axis=-1)
-        else:
-            # C_t = [M_t, S_t]
+            # Stack channels
+            if self.include_raw_maps:
+                # C_t = [M_t, S_t, A_t, K_t]
+                control_tensor = np.stack([
+                    keyword_mask,
+                    alignment_map,
+                    attention_map,
+                    keyword_map
+                ], axis=-1)
+            else:
+                # C_t = [M_t, S_t]
+                control_tensor = np.stack([
+                    keyword_mask,
+                    alignment_map
+                ], axis=-1)
+
+        # Mode 2: Build from alignment score
+        elif keyword_mask is not None and alignment_score is not None:
+            # Create alignment map from scalar score
+            # Alignment is uniform within keyword region, weighted by alignment_score
+            alignment_map = keyword_mask * alignment_score
+
+            # Stack channels
             control_tensor = np.stack([
                 keyword_mask,
                 alignment_map
             ], axis=-1)
+
+        else:
+            raise ValueError(
+                "Must provide either (attention_map, keyword_map) or (keyword_mask, alignment_score)"
+            )
 
         return control_tensor.astype(np.float32)
 
