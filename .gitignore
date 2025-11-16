@@ -38,7 +38,7 @@ ENV/
 *.ipynb_checkpoints
 
 # Data
-data/
+#data/
 outputs/
 checkpoints/
 logs/
