@@ -11,7 +11,7 @@ from pathlib import Path
 # Configuration
 ALIGNMENT_SCORE_FILE = 'data/alignment_score.csv'
 KEYWORDS_FILE = 'data/keywords.csv'
-SCREENSHOTS_DIR = 'data/screenshots_tiktok'
+SCREENSHOTS_DIR = 'data/video_scene_cuts'
 KEYWORD_MASKS_DIR = 'data/keyword_masks'
 
 print("=" * 70)
@@ -89,7 +89,7 @@ else:
 
         # Check what files are in this directory
         files = os.listdir(video_dir)
-        scene_files = [f for f in files if f.startswith('scene_')]
+        scene_files = [f for f in files if '-Scene-' in f and f.endswith('.jpg')]
 
         print(f"   ✓ Video {video_id}: {len(scene_files)} scene files")
         if len(scene_files) > 0:
@@ -100,20 +100,15 @@ else:
         expected_scenes = video_scenes['Scene Number'].values
         print(f"      Expected {len(expected_scenes)} scenes: {expected_scenes[:5]}...")
 
-        # Check naming conventions
+        # Check naming convention: {video_id}-Scene-{scene_num:03d}-01.jpg
         for scene_num in expected_scenes[:3]:
-            path1 = os.path.join(video_dir, f"scene_{scene_num}.png")
-            path2 = os.path.join(video_dir, f"scene_{scene_num:02d}.png")
+            expected_filename = f"{video_id}-Scene-{scene_num:03d}-01.jpg"
+            path = os.path.join(video_dir, expected_filename)
 
-            exists1 = os.path.exists(path1)
-            exists2 = os.path.exists(path2)
-
-            if exists1:
-                print(f"      ✓ Scene {scene_num}: found at scene_{scene_num}.png")
-            elif exists2:
-                print(f"      ✓ Scene {scene_num}: found at scene_{scene_num:02d}.png")
+            if os.path.exists(path):
+                print(f"      ✓ Scene {scene_num}: found at {expected_filename}")
             else:
-                print(f"      ❌ Scene {scene_num}: NOT FOUND (tried scene_{scene_num}.png and scene_{scene_num:02d}.png)")
+                print(f"      ❌ Scene {scene_num}: NOT FOUND (expected {expected_filename})")
 
 # 6. Summary
 print("\n" + "=" * 70)
@@ -128,8 +123,8 @@ if not os.path.exists(SCREENSHOTS_DIR):
     print(f"   2. Directory structure should be:")
     print(f"      {SCREENSHOTS_DIR}/")
     print(f"      ├── 7163329870906884097/")
-    print(f"      │   ├── scene_1.png")
-    print(f"      │   ├── scene_2.png")
+    print(f"      │   ├── 7163329870906884097-Scene-001-01.jpg")
+    print(f"      │   ├── 7163329870906884097-Scene-002-01.jpg")
     print(f"      │   └── ...")
     print(f"      ├── 7195702874672234498/")
     print(f"      │   └── ...")
@@ -137,7 +132,7 @@ if not os.path.exists(SCREENSHOTS_DIR):
 else:
     print("✓ Screenshots directory exists")
     print(f"\n   If masks still aren't generated, check:")
-    print(f"   1. Scene file naming (scene_N.png vs scene_0N.png)")
+    print(f"   1. Scene file naming (should be {{video_id}}-Scene-{{N:03d}}-01.jpg)")
     print(f"   2. Video IDs match between alignment_score.csv and folder names")
     print(f"   3. Scene numbers in CSV match the screenshot filenames")
 

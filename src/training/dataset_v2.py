@@ -132,20 +132,12 @@ class VideoSceneDataset(Dataset):
         keyword = self.keywords.get(video_id, "product")
 
         # Construct file paths
-        # Assuming screenshots are named like: {video_id}/scene_{scene_number}.png
+        # Screenshot naming pattern: {video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg
         screenshot_path = os.path.join(
             self.screenshots_dir,
             video_id,
-            f"scene_{scene_number}.png"
+            f"{video_id}-Scene-{scene_number:03d}-01.jpg"
         )
-
-        # Alternative naming: scene_{scene_number:02d}.png
-        if not os.path.exists(screenshot_path):
-            screenshot_path = os.path.join(
-                self.screenshots_dir,
-                video_id,
-                f"scene_{scene_number:02d}.png"
-            )
 
         # Load screenshot
         if not os.path.exists(screenshot_path):
