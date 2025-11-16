@@ -75,17 +75,18 @@ class VideoSceneDataset(Dataset):
             self.keywords_df[keyword_col]
         ))
 
-        # Filter by video_ids if provided
+        # IMPORTANT: Use alignment_score.csv as source of truth
+        # Filter out scenes without keywords first
+        self.alignment_df['video_id_str'] = self.alignment_df['video id'].astype(str)
+        self.alignment_df['has_keyword'] = self.alignment_df['video_id_str'].isin(self.keywords.keys())
+        self.alignment_df = self.alignment_df[self.alignment_df['has_keyword']].copy()
+
+        # Filter by video_ids if provided (for train/val split)
         if video_ids is not None:
             video_ids_str = [str(vid) for vid in video_ids]
             self.alignment_df = self.alignment_df[
                 self.alignment_df['video id'].astype(str).isin(video_ids_str)
             ]
-
-        # Filter out scenes without keywords
-        self.alignment_df['video_id_str'] = self.alignment_df['video id'].astype(str)
-        self.alignment_df['has_keyword'] = self.alignment_df['video_id_str'].isin(self.keywords.keys())
-        self.alignment_df = self.alignment_df[self.alignment_df['has_keyword']]
 
         # Reset index
         self.alignment_df = self.alignment_df.reset_index(drop=True)

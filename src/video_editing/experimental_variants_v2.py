@@ -262,6 +262,8 @@ class VideoVariantGenerator:
         """
         Generate all variants for all videos.
 
+        Uses alignment_score.csv as source of truth for video IDs.
+
         Args:
             output_dir: Directory to save variant specifications
 
@@ -270,13 +272,19 @@ class VideoVariantGenerator:
         """
         os.makedirs(output_dir, exist_ok=True)
 
-        # Get unique videos that have keywords
-        video_ids = [
-            str(vid) for vid in self.alignment_df['video id'].unique()
-            if str(vid) in self.keywords
-        ]
+        # IMPORTANT: Use alignment_score.csv as source of truth
+        # Get unique videos from alignment_score.csv that also have keywords
+        alignment_video_ids = set(self.alignment_df['video id'].astype(str).unique())
+        keyword_video_ids = set(self.keywords.keys())
 
-        print(f"Generating variants for {len(video_ids)} videos...")
+        # Intersection: videos with both alignment scores AND keywords
+        video_ids = sorted(list(alignment_video_ids & keyword_video_ids))
+
+        print(f"Video ID validation:")
+        print(f"  Videos in alignment_score.csv: {len(alignment_video_ids)}")
+        print(f"  Videos with keywords: {len(keyword_video_ids)}")
+        print(f"  Valid videos (will generate variants): {len(video_ids)}")
+        print(f"\nGenerating variants for {len(video_ids)} videos...")
 
         all_variants = {}
         for video_id in video_ids:

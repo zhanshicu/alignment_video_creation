@@ -45,7 +45,33 @@ Required packages:
 - `pandas`, `numpy`, `pillow`
 - `opencv-python`, `matplotlib`
 
-### 2. Preprocess Data: Generate Keyword Masks
+### 2. Prepare Dataset
+
+**IMPORTANT:** Use `alignment_score.csv` as the source of truth for video IDs, not `keywords.csv`. Some videos in `keywords.csv` may not be valid or may not have alignment scores.
+
+```python
+from src.training import get_valid_video_ids, split_train_val_videos
+
+# Get valid video IDs (intersection of alignment_score.csv and keywords.csv)
+valid_video_ids = get_valid_video_ids(
+    alignment_score_file='data/alignment_score.csv',
+    keywords_file='data/keywords.csv'
+)
+
+# Split into train/val (80/20 split with shuffling)
+train_videos, val_videos = split_train_val_videos(
+    video_ids=valid_video_ids,
+    val_ratio=0.2,
+    random_seed=42
+)
+```
+
+Or run the example script:
+```bash
+python examples/prepare_dataset.py
+```
+
+### 3. Preprocess Data: Generate Keyword Masks
 
 Since we don't have raw keyword heatmaps, we use CLIPSeg to generate spatial masks:
 
@@ -60,13 +86,19 @@ python scripts/generate_keyword_masks.py \
 
 This creates binary masks showing where the product appears in each scene.
 
-### 3. Train ControlNet Model
+### 4. Train ControlNet Model
 
 Open and run the updated notebook:
 
 ```bash
 jupyter notebook finetune_and_inference_v2.ipynb
 ```
+
+**Important Notes:**
+- The dataset is automatically split into train (80%) and validation (20%) sets
+- Video IDs are shuffled before splitting for randomness
+- The split is based on **videos**, not scenes (all scenes from a video go to the same split)
+- Use `random_seed=42` for reproducibility
 
 Or use the Python API:
 
@@ -104,7 +136,7 @@ trainer = ControlNetTrainer(
 trainer.train()
 ```
 
-### 4. Generate Experimental Variants
+### 5. Generate Experimental Variants
 
 Generate 7 variants for each video:
 
