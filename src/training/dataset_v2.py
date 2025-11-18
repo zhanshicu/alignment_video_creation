@@ -87,13 +87,74 @@ class VideoSceneDataset(Dataset):
         self.alignment_df['has_keyword'] = self.alignment_df['video_id_str'].isin(self.keywords.keys())
         self.alignment_df = self.alignment_df[self.alignment_df['has_keyword']]
 
+        print(f"After keyword filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
+
+        # Filter out scenes without valid screenshots
+        print("Validating screenshot availability...")
+        self.alignment_df = self._filter_valid_scenes(self.alignment_df)
+
         # Reset index
         self.alignment_df = self.alignment_df.reset_index(drop=True)
 
-        print(f"Dataset initialized with {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
+        print(f"✓ Dataset initialized with {len(self.alignment_df)} valid scenes from {self.alignment_df['video id'].nunique()} videos")
 
     def __len__(self) -> int:
         return len(self.alignment_df)
+
+    def _filter_valid_scenes(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Filter out scenes that don't have valid screenshot files.
+
+        Args:
+            df: DataFrame with scene information
+
+        Returns:
+            Filtered DataFrame with only scenes that have valid screenshots
+        """
+        valid_indices = []
+        invalid_count = 0
+        missing_videos = set()
+
+        for idx, row in df.iterrows():
+            video_id = str(row['video id'])
+            scene_number = int(row['Scene Number'])
+
+            # Check all possible screenshot paths
+            screenshot_path = os.path.join(
+                self.screenshots_dir,
+                video_id,
+                f"{video_id}-Scene-{scene_number:03d}-01.jpg"
+            )
+
+            # Alternative paths
+            if not os.path.exists(screenshot_path):
+                screenshot_path = os.path.join(
+                    self.screenshots_dir,
+                    video_id,
+                    f"scene_{scene_number}.png"
+                )
+
+            if not os.path.exists(screenshot_path):
+                screenshot_path = os.path.join(
+                    self.screenshots_dir,
+                    video_id,
+                    f"scene_{scene_number:02d}.png"
+                )
+
+            # Check if any valid path exists
+            if os.path.exists(screenshot_path):
+                valid_indices.append(idx)
+            else:
+                invalid_count += 1
+                missing_videos.add(video_id)
+
+        if invalid_count > 0:
+            print(f"  Filtered out {invalid_count} scenes without valid screenshots")
+            print(f"  Missing screenshots for {len(missing_videos)} videos")
+            if len(missing_videos) <= 10:
+                print(f"  Video IDs with missing screenshots: {list(missing_videos)[:10]}")
+
+        return df.loc[valid_indices]
 
     def _load_image(self, path: str) -> np.ndarray:
         """Load image and resize."""
@@ -154,13 +215,15 @@ class VideoSceneDataset(Dataset):
                 f"scene_{scene_number:02d}.png"
             )
 
-        # Load screenshot
+        # Load screenshot (should exist due to validation)
         if not os.path.exists(screenshot_path):
-            # If screenshot doesn't exist, create a dummy black image
-            # (This is for testing when data is not available)
-            image = np.zeros((self.image_size[0], self.image_size[1], 3), dtype=np.float32)
-        else:
-            image = self._load_image(screenshot_path)
+            raise FileNotFoundError(
+                f"Screenshot not found: {screenshot_path}\n"
+                f"Video: {video_id}, Scene: {scene_number}\n"
+                f"This should not happen after validation. Please check data integrity."
+            )
+
+        image = self._load_image(screenshot_path)
 
         # Convert to [-1, 1]
         image = (image * 2.0) - 1.0
@@ -222,6 +285,71 @@ class VideoSceneDataset(Dataset):
             'video_id': video_id,
             'scene_number': scene_number,
         }
+
+
+    @staticmethod
+    def get_valid_video_ids(
+        alignment_score_file: str,
+        keywords_file: str,
+        screenshots_dir: str = "data/video_scene_cuts",
+    ) -> List[str]:
+        """
+        Get list of valid video IDs that have both keywords and screenshots.
+
+        Args:
+            alignment_score_file: Path to alignment_score.csv
+            keywords_file: Path to keywords.csv
+            screenshots_dir: Directory containing screenshots
+
+        Returns:
+            List of valid video IDs
+        """
+        # Load data
+        alignment_df = pd.read_csv(alignment_score_file)
+        alignment_df.columns = alignment_df.columns.str.strip()
+
+        keywords_df = pd.read_csv(keywords_file)
+        keywords_df.columns = keywords_df.columns.str.strip()
+
+        # Get videos with keywords
+        if '_id' in keywords_df.columns:
+            video_id_col = '_id'
+        elif 'video_id' in keywords_df.columns:
+            video_id_col = 'video_id'
+        else:
+            raise ValueError("Could not find video ID column in keywords.csv")
+
+        if 'keyword_list[0]' in keywords_df.columns:
+            keyword_col = 'keyword_list[0]'
+        elif 'keyword' in keywords_df.columns:
+            keyword_col = 'keyword'
+        else:
+            raise ValueError("Could not find keyword column in keywords.csv")
+
+        # Filter out empty keywords
+        keywords_df = keywords_df[keywords_df[keyword_col].notna() & (keywords_df[keyword_col] != '')]
+        valid_keyword_videos = set(keywords_df[video_id_col].astype(str).tolist())
+
+        # Get videos with screenshots
+        valid_screenshot_videos = set()
+        if os.path.exists(screenshots_dir):
+            for video_id in os.listdir(screenshots_dir):
+                video_path = os.path.join(screenshots_dir, video_id)
+                if os.path.isdir(video_path):
+                    # Check if this directory has any jpg or png files
+                    files = os.listdir(video_path)
+                    if any(f.endswith(('.jpg', '.png')) for f in files):
+                        valid_screenshot_videos.add(video_id)
+
+        # Get intersection: videos with both keywords and screenshots
+        valid_videos = list(valid_keyword_videos & valid_screenshot_videos)
+
+        print(f"Valid video analysis:")
+        print(f"  Videos with keywords: {len(valid_keyword_videos)}")
+        print(f"  Videos with screenshots: {len(valid_screenshot_videos)}")
+        print(f"  Valid videos (both): {len(valid_videos)}")
+
+        return valid_videos
 
 
 class VideoSceneDataModule:
