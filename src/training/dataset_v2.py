@@ -89,72 +89,44 @@ class VideoSceneDataset(Dataset):
 
         print(f"After keyword filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
 
-        # Filter out scenes without valid screenshots
-        print("Validating screenshot availability...")
-        self.alignment_df = self._filter_valid_scenes(self.alignment_df)
+        # Fast filter: Only keep videos with screenshot directories
+        print("Filtering videos with screenshot directories...")
+        valid_video_dirs = self._get_valid_video_directories()
+        self.alignment_df = self.alignment_df[self.alignment_df['video_id_str'].isin(valid_video_dirs)]
+
+        print(f"After directory filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
 
         # Reset index
         self.alignment_df = self.alignment_df.reset_index(drop=True)
 
-        print(f"✓ Dataset initialized with {len(self.alignment_df)} valid scenes from {self.alignment_df['video id'].nunique()} videos")
+        print(f"✓ Dataset initialized with {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
 
     def __len__(self) -> int:
         return len(self.alignment_df)
 
-    def _filter_valid_scenes(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _get_valid_video_directories(self) -> set:
         """
-        Filter out scenes that don't have valid screenshot files.
-
-        Args:
-            df: DataFrame with scene information
+        Fast check: Get set of video IDs that have screenshot directories.
 
         Returns:
-            Filtered DataFrame with only scenes that have valid screenshots
+            Set of valid video IDs (as strings)
         """
-        valid_indices = []
-        invalid_count = 0
-        missing_videos = set()
+        valid_dirs = set()
 
-        for idx, row in df.iterrows():
-            video_id = str(row['video id'])
-            scene_number = int(row['Scene Number'])
+        if not os.path.exists(self.screenshots_dir):
+            print(f"  ⚠️  Screenshots directory not found: {self.screenshots_dir}")
+            return valid_dirs
 
-            # Check all possible screenshot paths
-            screenshot_path = os.path.join(
-                self.screenshots_dir,
-                video_id,
-                f"{video_id}-Scene-{scene_number:03d}-01.jpg"
-            )
+        # List all directories in screenshots_dir
+        for item in os.listdir(self.screenshots_dir):
+            item_path = os.path.join(self.screenshots_dir, item)
+            if os.path.isdir(item_path):
+                # Check if directory has any image files
+                files = os.listdir(item_path)
+                if any(f.endswith(('.jpg', '.jpeg', '.png')) for f in files):
+                    valid_dirs.add(item)
 
-            # Alternative paths
-            if not os.path.exists(screenshot_path):
-                screenshot_path = os.path.join(
-                    self.screenshots_dir,
-                    video_id,
-                    f"scene_{scene_number}.png"
-                )
-
-            if not os.path.exists(screenshot_path):
-                screenshot_path = os.path.join(
-                    self.screenshots_dir,
-                    video_id,
-                    f"scene_{scene_number:02d}.png"
-                )
-
-            # Check if any valid path exists
-            if os.path.exists(screenshot_path):
-                valid_indices.append(idx)
-            else:
-                invalid_count += 1
-                missing_videos.add(video_id)
-
-        if invalid_count > 0:
-            print(f"  Filtered out {invalid_count} scenes without valid screenshots")
-            print(f"  Missing screenshots for {len(missing_videos)} videos")
-            if len(missing_videos) <= 10:
-                print(f"  Video IDs with missing screenshots: {list(missing_videos)[:10]}")
-
-        return df.loc[valid_indices]
+        return valid_dirs
 
     def _load_image(self, path: str) -> np.ndarray:
         """Load image and resize."""
