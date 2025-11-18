@@ -24,7 +24,7 @@ class VideoSceneDataset(Dataset):
         self,
         alignment_score_file: str,
         keywords_file: str,
-        screenshots_dir: str = "data/screenshots_tiktok",
+        screenshots_dir: str = "data/video_scene_cuts",
         keyword_masks_dir: str = "data/keyword_masks",
         video_ids: Optional[List[str]] = None,
         image_size: Tuple[int, int] = (512, 512),
@@ -131,14 +131,22 @@ class VideoSceneDataset(Dataset):
         keyword = self.keywords.get(video_id, "product")
 
         # Construct file paths
-        # Assuming screenshots are named like: {video_id}/scene_{scene_number}.png
+        # Format: {video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg
         screenshot_path = os.path.join(
             self.screenshots_dir,
             video_id,
-            f"scene_{scene_number}.png"
+            f"{video_id}-Scene-{scene_number:03d}-01.jpg"
         )
 
-        # Alternative naming: scene_{scene_number:02d}.png
+        # Alternative naming (for backwards compatibility)
+        if not os.path.exists(screenshot_path):
+            screenshot_path = os.path.join(
+                self.screenshots_dir,
+                video_id,
+                f"scene_{scene_number}.png"
+            )
+
+        # Another alternative: scene_{scene_number:02d}.png
         if not os.path.exists(screenshot_path):
             screenshot_path = os.path.join(
                 self.screenshots_dir,
@@ -225,7 +233,7 @@ class VideoSceneDataModule:
         keywords_file: str,
         train_videos: List[str],
         val_videos: List[str],
-        screenshots_dir: str = "data/screenshots_tiktok",
+        screenshots_dir: str = "data/video_scene_cuts",
         keyword_masks_dir: str = "data/keyword_masks",
         batch_size: int = 4,
         num_workers: int = 4,
