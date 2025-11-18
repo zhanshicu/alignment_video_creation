@@ -122,9 +122,9 @@ class ControlNetTrainer:
         for batch_idx, batch in enumerate(pbar):
             # Move to device
             image = batch['image'].to(self.device)
-            control_tensor = batch['control_tensor'].to(self.device)
+            control_tensor = batch['control'].to(self.device)  # Fixed: 'control' not 'control_tensor'
             background_mask = batch['background_mask'].to(self.device)
-            keyword_text = batch['keyword_text'][0]  # Assume same keyword in batch
+            keyword_text = batch['keyword'][0]  # Fixed: 'keyword' not 'keyword_text'
 
             # Forward pass
             with torch.cuda.amp.autocast(enabled=self.mixed_precision):
@@ -211,9 +211,9 @@ class ControlNetTrainer:
         for batch in tqdm(self.val_dataloader, desc="Validation"):
             # Move to device
             image = batch['image'].to(self.device)
-            control_tensor = batch['control_tensor'].to(self.device)
+            control_tensor = batch['control'].to(self.device)  # Fixed: 'control' not 'control_tensor'
             background_mask = batch['background_mask'].to(self.device)
-            keyword_text = batch['keyword_text'][0]
+            keyword_text = batch['keyword'][0]  # Fixed: 'keyword' not 'keyword_text'
 
             # Forward pass
             outputs = self.model.training_step(
