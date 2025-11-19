@@ -96,7 +96,7 @@ attention_heatmap/             # NEW: Attention heatmaps
 | Component         | Old Path                          | New Path                                              |
 |-------------------|-----------------------------------|-------------------------------------------------------|
 | Scene images      | `data/screenshots_tiktok/`        | `data/video_scene_cuts/{video_id}/{video_id}-Scene-0xx-01.jpg` |
-| Keyword masks     | `data/keyword_masks/`             | `keyword_masks/{video_id}/{video_id}-Scene-0xx-01.png` |
+| Keyword masks     | `data/keyword_masks/`             | `keyword_masks/{video_id}/scene_{x}.png` |
 | Attention maps    | N/A (computed as scalar)          | `attention_heatmap/{video_id}/{video_id}-Scene-0xx-01.jpg` |
 | Valid scenes list | N/A                               | `data/valid_scenes.csv` |
 | Variants output   | `outputs/variants/`               | `outputs/variants_v3/` |
@@ -206,9 +206,9 @@ class VideoVariantGeneratorV3:
    - Ensure consistent naming: `{video_id}-Scene-{number:03d}-01.jpg`
 
 3. **Reorganize keyword masks**:
-   - Move from: `data/keyword_masks/{video_id}/scene_{x}.png`
-   - To: `keyword_masks/{video_id}/{video_id}-Scene-00x-01.png`
-   - Ensure consistent naming
+   - Move from: `data/keyword_masks/{video_id}/scene_{x}.png` (if applicable)
+   - To: `keyword_masks/{video_id}/scene_{x}.png` (root level, not in data/)
+   - Ensure consistent naming: `scene_1.png`, `scene_2.png`, etc.
 
 4. **Run data validation**:
    ```bash

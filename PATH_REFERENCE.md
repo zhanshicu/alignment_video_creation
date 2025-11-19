@@ -29,15 +29,15 @@ Path: keyword_masks/
 Structure:
   keyword_masks/
   └── {video_id}/
-      └── {video_id}-Scene-001-01.png
-      └── {video_id}-Scene-002-01.png
-      └── {video_id}-Scene-003-01.png
+      └── scene_1.png
+      └── scene_2.png
+      └── scene_3.png
       └── ...
 
 Example:
-  keyword_masks/123456/123456-Scene-001-01.png
-  keyword_masks/123456/123456-Scene-002-01.png
-  keyword_masks/abc789/abc789-Scene-001-01.png
+  keyword_masks/123456/scene_1.png
+  keyword_masks/123456/scene_2.png
+  keyword_masks/abc789/scene_1.png
 ```
 
 ### Attention Heatmaps
@@ -165,13 +165,16 @@ Examples:
 
 ### Keyword Mask Filenames
 ```
-Pattern: {video_id}-Scene-{scene_number:03d}-01.png
+Pattern: scene_{scene_number}.png
 Extension: .png (must be PNG for masks)
 
 Examples:
-  ✅ 123456-Scene-001-01.png
-  ✅ abc789-Scene-042-01.png
-  ❌ 123456-Scene-001-01.jpg  (wrong extension)
+  ✅ scene_1.png
+  ✅ scene_42.png
+  ✅ scene_123.png
+  ❌ scene-1.png           (wrong separator)
+  ❌ scene_1.jpg           (wrong extension)
+  ❌ scene_001.png         (don't use zero-padding)
 ```
 
 ### Attention Heatmap Filenames
@@ -197,12 +200,12 @@ scene_number = 1
 
 # Construct paths
 scene_image_path = f"data/video_scene_cuts/{video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg"
-keyword_mask_path = f"keyword_masks/{video_id}/{video_id}-Scene-{scene_number:03d}-01.png"
+keyword_mask_path = f"keyword_masks/{video_id}/scene_{scene_number}.png"
 attention_heatmap_path = f"attention_heatmap/{video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg"
 
 # Results:
 # scene_image_path = "data/video_scene_cuts/123456/123456-Scene-001-01.jpg"
-# keyword_mask_path = "keyword_masks/123456/123456-Scene-001-01.png"
+# keyword_mask_path = "keyword_masks/123456/scene_1.png"
 # attention_heatmap_path = "attention_heatmap/123456/123456-Scene-001-01.jpg"
 ```
 
@@ -280,14 +283,14 @@ else:
 
 ## 🔄 Path Changes from V2
 
-| Component      | V2 Path                     | V3 Path                                    |
-|----------------|-----------------------------|--------------------------------------------|
-| Scene images   | `data/screenshots_tiktok/`  | `data/video_scene_cuts/`                   |
-| Keyword masks  | `data/keyword_masks/`       | `keyword_masks/` (moved to root)           |
-| Attention      | (scalar in CSV)             | `attention_heatmap/` (new directory)       |
-| Valid scenes   | (none)                      | `data/valid_scenes.csv` (new file)         |
-| Variants       | `outputs/variants/`         | `outputs/variants_v3/`                     |
-| Training       | `outputs/training/`         | `outputs/training_v3/`                     |
+| Component      | V2 Path                     | V3 Path                                    | V3 Filename Format |
+|----------------|-----------------------------|--------------------------------------------|-------------------|
+| Scene images   | `data/screenshots_tiktok/`  | `data/video_scene_cuts/`                   | `{video_id}-Scene-{num:03d}-01.jpg` |
+| Keyword masks  | `data/keyword_masks/`       | `keyword_masks/` (moved to root)           | `scene_{num}.png` |
+| Attention      | (scalar in CSV)             | `attention_heatmap/` (new directory)       | `{video_id}-Scene-{num:03d}-01.jpg` |
+| Valid scenes   | (none)                      | `data/valid_scenes.csv` (new file)         | N/A |
+| Variants       | `outputs/variants/`         | `outputs/variants_v3/`                     | N/A |
+| Training       | `outputs/training/`         | `outputs/training_v3/`                     | N/A |
 
 ---
 
