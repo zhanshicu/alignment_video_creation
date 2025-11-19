@@ -134,6 +134,7 @@ class ControlNetAdapter(nn.Module):
         # Encoder blocks
         self.encoder_blocks = nn.ModuleList()
         self.zero_convs = nn.ModuleList()
+        self.feature_channels = []  # Track channel counts for each feature
 
         current_channels = base_channels
         for i, mult in enumerate(channel_mult):
@@ -148,6 +149,7 @@ class ControlNetAdapter(nn.Module):
                     use_attention=use_attention
                 )
                 self.encoder_blocks.append(block)
+                self.feature_channels.append(out_channels)
                 current_channels = out_channels
 
             # Downsample (except last level)
@@ -159,19 +161,21 @@ class ControlNetAdapter(nn.Module):
                     use_attention=False
                 )
                 self.encoder_blocks.append(downsample_block)
-
-        # Zero convolutions for injection
-        # Match SD U-Net block dimensions
-        for sd_ch in sd_channels:
-            # Find closest matching encoder channel
-            zero_conv = ZeroConv(current_channels, sd_ch)
-            self.zero_convs.append(zero_conv)
+                self.feature_channels.append(current_channels)
 
         # Middle block
         self.middle_block = nn.Sequential(
             ControlNetBlock(current_channels, current_channels, stride=1, use_attention=True),
             ControlNetBlock(current_channels, current_channels, stride=1, use_attention=False),
         )
+        # Add middle block output channels (produces 1 final feature)
+        self.feature_channels.append(current_channels)
+
+        # Zero convolutions for injection - match feature channels to SD U-Net
+        # Create zero conv for each feature, matching its channel count
+        for i, feat_ch in enumerate(self.feature_channels[:len(sd_channels)]):
+            zero_conv = ZeroConv(feat_ch, sd_channels[i])
+            self.zero_convs.append(zero_conv)
 
     def forward(
         self,
