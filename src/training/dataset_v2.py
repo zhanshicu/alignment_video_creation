@@ -90,15 +90,33 @@ class VideoSceneDataset(Dataset):
 
         print(f"After keyword filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
 
-        # Only validate directories if video_ids not provided (i.e., using all videos)
-        # If video_ids are provided, assume they're already validated
-        if video_ids is None:
-            print("Filtering videos with screenshot directories...")
-            valid_video_dirs = self._get_valid_video_directories()
-            self.alignment_df = self.alignment_df[self.alignment_df['video_id_str'].isin(valid_video_dirs)]
-            print(f"After directory filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
-        else:
-            print("Skipping directory validation (using provided video_ids)")
+        # Validate that each scene file actually exists
+        print("Validating scene-level screenshot files...")
+        valid_indices = []
+        for idx, row in self.alignment_df.iterrows():
+            video_id = str(row['video id'])
+            scene_number = int(row['Scene Number'])
+
+            # Try both direct scene number and +1 offset
+            screenshot_path = os.path.join(
+                self.screenshots_dir,
+                video_id,
+                f"{video_id}-Scene-{scene_number:03d}-01.jpg"
+            )
+
+            if not os.path.exists(screenshot_path):
+                screenshot_path = os.path.join(
+                    self.screenshots_dir,
+                    video_id,
+                    f"{video_id}-Scene-{(scene_number + 1):03d}-01.jpg"
+                )
+
+            # Only include if screenshot exists
+            if os.path.exists(screenshot_path):
+                valid_indices.append(idx)
+
+        self.alignment_df = self.alignment_df.loc[valid_indices]
+        print(f"After scene-level validation: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
 
         # Reset index
         self.alignment_df = self.alignment_df.reset_index(drop=True)
