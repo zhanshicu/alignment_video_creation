@@ -169,26 +169,19 @@ class VideoSceneDataset(Dataset):
 
         # Construct file paths
         # Format: {video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg
+        # Note: Scene numbers in filenames are 1-indexed, so add 1 if CSV is 0-indexed
         screenshot_path = os.path.join(
             self.screenshots_dir,
             video_id,
             f"{video_id}-Scene-{scene_number:03d}-01.jpg"
         )
 
-        # Alternative naming (for backwards compatibility)
+        # Try with +1 offset if not found (CSV might be 0-indexed, files 1-indexed)
         if not os.path.exists(screenshot_path):
             screenshot_path = os.path.join(
                 self.screenshots_dir,
                 video_id,
-                f"scene_{scene_number}.png"
-            )
-
-        # Another alternative: scene_{scene_number:02d}.png
-        if not os.path.exists(screenshot_path):
-            screenshot_path = os.path.join(
-                self.screenshots_dir,
-                video_id,
-                f"scene_{scene_number:02d}.png"
+                f"{video_id}-Scene-{(scene_number + 1):03d}-01.jpg"
             )
 
         # Load screenshot (should exist due to validation)
