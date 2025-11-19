@@ -102,7 +102,7 @@ class ControlNetAdapter(nn.Module):
         base_channels: int = 64,
         channel_mult: Tuple[int, ...] = (1, 2, 4, 8),
         num_res_blocks: int = 2,
-        attention_resolutions: Tuple[int, ...] = (4, 2, 1),
+        attention_resolutions: Tuple[int, ...] = (8,),
         sd_channels: Tuple[int, ...] = (320, 640, 1280, 1280),
     ):
         """
