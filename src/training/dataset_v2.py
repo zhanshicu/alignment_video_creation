@@ -81,6 +81,7 @@ class VideoSceneDataset(Dataset):
             self.alignment_df = self.alignment_df[
                 self.alignment_df['video id'].astype(str).isin(video_ids_str)
             ]
+            print(f"Filtered to {len(video_ids_str)} specified videos")
 
         # Filter out scenes without keywords
         self.alignment_df['video_id_str'] = self.alignment_df['video id'].astype(str)
@@ -89,12 +90,15 @@ class VideoSceneDataset(Dataset):
 
         print(f"After keyword filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
 
-        # Fast filter: Only keep videos with screenshot directories
-        print("Filtering videos with screenshot directories...")
-        valid_video_dirs = self._get_valid_video_directories()
-        self.alignment_df = self.alignment_df[self.alignment_df['video_id_str'].isin(valid_video_dirs)]
-
-        print(f"After directory filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
+        # Only validate directories if video_ids not provided (i.e., using all videos)
+        # If video_ids are provided, assume they're already validated
+        if video_ids is None:
+            print("Filtering videos with screenshot directories...")
+            valid_video_dirs = self._get_valid_video_directories()
+            self.alignment_df = self.alignment_df[self.alignment_df['video_id_str'].isin(valid_video_dirs)]
+            print(f"After directory filtering: {len(self.alignment_df)} scenes from {self.alignment_df['video id'].nunique()} videos")
+        else:
+            print("Skipping directory validation (using provided video_ids)")
 
         # Reset index
         self.alignment_df = self.alignment_df.reset_index(drop=True)
