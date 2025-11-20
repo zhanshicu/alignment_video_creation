@@ -25,9 +25,9 @@ Example:
 
 ### Keyword Masks
 ```
-Path: keyword_masks/
+Path: data/keyword_masks/
 Structure:
-  keyword_masks/
+  data/keyword_masks/
   └── {video_id}/
       └── scene_1.png
       └── scene_2.png
@@ -35,26 +35,26 @@ Structure:
       └── ...
 
 Example:
-  keyword_masks/123456/scene_1.png
-  keyword_masks/123456/scene_2.png
-  keyword_masks/abc789/scene_1.png
+  data/keyword_masks/123456/scene_1.png
+  data/keyword_masks/123456/scene_2.png
+  data/keyword_masks/abc789/scene_1.png
 ```
 
 ### Attention Heatmaps
 ```
-Path: attention_heatmap/
+Path: data/attention_heatmap/
 Structure:
-  attention_heatmap/
+  data/attention_heatmap/
   └── {video_id}/
-      └── {video_id}-Scene-001-01.jpg
-      └── {video_id}-Scene-002-01.jpg
-      └── {video_id}-Scene-003-01.jpg
+      └── {video_id}-Scene-001.jpg
+      └── {video_id}-Scene-002.jpg
+      └── {video_id}-Scene-003.jpg
       └── ...
 
 Example:
-  attention_heatmap/123456/123456-Scene-001-01.jpg
-  attention_heatmap/123456/123456-Scene-002-01.jpg
-  attention_heatmap/abc789/abc789-Scene-001-01.jpg
+  data/attention_heatmap/123456/123456-Scene-001.jpg
+  data/attention_heatmap/123456/123456-Scene-002.jpg
+  data/attention_heatmap/abc789/abc789-Scene-001.jpg
 ```
 
 ---
@@ -179,13 +179,15 @@ Examples:
 
 ### Attention Heatmap Filenames
 ```
-Pattern: {video_id}-Scene-{scene_number:03d}-01.jpg
+Pattern: {video_id}-Scene-{scene_number:03d}.jpg
 Extension: .jpg or .png
+NOTE: No "-01" suffix!
 
 Examples:
-  ✅ 123456-Scene-001-01.jpg
-  ✅ abc789-Scene-042-01.jpg
-  ✅ xyz999-Scene-123-01.png
+  ✅ 123456-Scene-001.jpg
+  ✅ abc789-Scene-042.jpg
+  ✅ xyz999-Scene-123.png
+  ❌ 123456-Scene-001-01.jpg  (don't use -01 suffix)
 ```
 
 ---
@@ -200,13 +202,13 @@ scene_number = 1
 
 # Construct paths
 scene_image_path = f"data/video_scene_cuts/{video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg"
-keyword_mask_path = f"keyword_masks/{video_id}/scene_{scene_number}.png"
-attention_heatmap_path = f"attention_heatmap/{video_id}/{video_id}-Scene-{scene_number:03d}-01.jpg"
+keyword_mask_path = f"data/keyword_masks/{video_id}/scene_{scene_number}.png"
+attention_heatmap_path = f"data/attention_heatmap/{video_id}/{video_id}-Scene-{scene_number:03d}.jpg"
 
 # Results:
 # scene_image_path = "data/video_scene_cuts/123456/123456-Scene-001-01.jpg"
-# keyword_mask_path = "keyword_masks/123456/scene_1.png"
-# attention_heatmap_path = "attention_heatmap/123456/123456-Scene-001-01.jpg"
+# keyword_mask_path = "data/keyword_masks/123456/scene_1.png"
+# attention_heatmap_path = "data/attention_heatmap/123456/123456-Scene-001.jpg"
 ```
 
 ### Parsing Scene Filename
@@ -286,8 +288,8 @@ else:
 | Component      | V2 Path                     | V3 Path                                    | V3 Filename Format |
 |----------------|-----------------------------|--------------------------------------------|-------------------|
 | Scene images   | `data/screenshots_tiktok/`  | `data/video_scene_cuts/`                   | `{video_id}-Scene-{num:03d}-01.jpg` |
-| Keyword masks  | `data/keyword_masks/`       | `keyword_masks/` (moved to root)           | `scene_{num}.png` |
-| Attention      | (scalar in CSV)             | `attention_heatmap/` (new directory)       | `{video_id}-Scene-{num:03d}-01.jpg` |
+| Keyword masks  | `data/keyword_masks/`       | `data/keyword_masks/`                      | `scene_{num}.png` |
+| Attention      | (scalar in CSV)             | `data/attention_heatmap/` (new directory)  | `{video_id}-Scene-{num:03d}.jpg` (no -01) |
 | Valid scenes   | (none)                      | `data/valid_scenes.csv` (new file)         | N/A |
 | Variants       | `outputs/variants/`         | `outputs/variants_v3/`                     | N/A |
 | Training       | `outputs/training/`         | `outputs/training_v3/`                     | N/A |

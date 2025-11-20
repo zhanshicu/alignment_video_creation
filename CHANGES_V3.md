@@ -96,8 +96,8 @@ attention_heatmap/             # NEW: Attention heatmaps
 | Component         | Old Path                          | New Path                                              |
 |-------------------|-----------------------------------|-------------------------------------------------------|
 | Scene images      | `data/screenshots_tiktok/`        | `data/video_scene_cuts/{video_id}/{video_id}-Scene-0xx-01.jpg` |
-| Keyword masks     | `data/keyword_masks/`             | `keyword_masks/{video_id}/scene_{x}.png` |
-| Attention maps    | N/A (computed as scalar)          | `attention_heatmap/{video_id}/{video_id}-Scene-0xx-01.jpg` |
+| Keyword masks     | `data/keyword_masks/`             | `data/keyword_masks/{video_id}/scene_{x}.png` |
+| Attention maps    | N/A (computed as scalar)          | `data/attention_heatmap/{video_id}/{video_id}-Scene-0xx.jpg` (NO -01!) |
 | Valid scenes list | N/A                               | `data/valid_scenes.csv` |
 | Variants output   | `outputs/variants/`               | `outputs/variants_v3/` |
 | Training output   | `outputs/training/`               | `outputs/training_v3/` |
@@ -197,8 +197,9 @@ class VideoVariantGeneratorV3:
 
 1. **Prepare attention heatmaps**:
    - Generate attention heatmaps for all scenes
-   - Save to: `attention_heatmap/{video_id}/{video_id}-Scene-0xx-01.jpg`
+   - Save to: `data/attention_heatmap/{video_id}/{video_id}-Scene-{number:03d}.jpg`
    - Format: Grayscale images (0-255)
+   - **IMPORTANT**: No `-01` suffix in the filename!
 
 2. **Reorganize scene images**:
    - Move from: `data/screenshots_tiktok/{video_id}/scene_{x}.png`
@@ -206,9 +207,9 @@ class VideoVariantGeneratorV3:
    - Ensure consistent naming: `{video_id}-Scene-{number:03d}-01.jpg`
 
 3. **Reorganize keyword masks**:
-   - Move from: `data/keyword_masks/{video_id}/scene_{x}.png` (if applicable)
-   - To: `keyword_masks/{video_id}/scene_{x}.png` (root level, not in data/)
+   - Keep in: `data/keyword_masks/{video_id}/scene_{x}.png`
    - Ensure consistent naming: `scene_1.png`, `scene_2.png`, etc.
+   - No changes needed if already in this format
 
 4. **Run data validation**:
    ```bash
@@ -260,12 +261,12 @@ Before running the new framework, verify:
   - [ ] Filenames match: `{video_id}-Scene-0xx-01.jpg`
   - [ ] All scenes present
 
-- [ ] Keyword masks in `keyword_masks/{video_id}/`
-  - [ ] Filenames match: `{video_id}-Scene-0xx-01.png`
+- [ ] Keyword masks in `data/keyword_masks/{video_id}/`
+  - [ ] Filenames match: `scene_{number}.png`
   - [ ] Same scenes as scene images
 
-- [ ] Attention heatmaps in `attention_heatmap/{video_id}/`
-  - [ ] Filenames match: `{video_id}-Scene-0xx-01.jpg`
+- [ ] Attention heatmaps in `data/attention_heatmap/{video_id}/`
+  - [ ] Filenames match: `{video_id}-Scene-{number:03d}.jpg` (NO `-01` suffix!)
   - [ ] Same scenes as scene images
   - [ ] Grayscale images (0-255)
 
@@ -296,8 +297,10 @@ Before running the new framework, verify:
 
 **Solution**:
 1. Check directory structure matches requirements
-2. Verify filename format: `{video_id}-Scene-{number:03d}-01.jpg`
-3. Run `data_validation.ipynb` to see detailed errors
+   - Scene images: `data/video_scene_cuts/{video_id}/{video_id}-Scene-{num:03d}-01.jpg`
+   - Keyword masks: `data/keyword_masks/{video_id}/scene_{num}.png`
+   - Attention heatmaps: `data/attention_heatmap/{video_id}/{video_id}-Scene-{num:03d}.jpg`
+2. Run `data_validation.ipynb` to see detailed errors
 
 ### Issue 2: "Could not find video ID column"
 **Cause**: `keywords.csv` has unexpected column names
