@@ -136,6 +136,7 @@ class ControlNetAdapter(nn.Module):
         # Encoder blocks
         self.encoder_blocks = nn.ModuleList()
         self.zero_convs = nn.ModuleList()
+        self.encoder_channels = []  # Track channel count at each level
 
         current_channels = base_channels
         for i, mult in enumerate(channel_mult):
@@ -150,6 +151,7 @@ class ControlNetAdapter(nn.Module):
                     use_attention=use_attention
                 )
                 self.encoder_blocks.append(block)
+                self.encoder_channels.append(out_channels)  # Track output channels
                 current_channels = out_channels
 
             # Downsample (except last level)
@@ -161,17 +163,21 @@ class ControlNetAdapter(nn.Module):
                     use_attention=False
                 )
                 self.encoder_blocks.append(downsample_block)
+                self.encoder_channels.append(current_channels)  # Track output channels
 
         # Zero convolutions for injection
-        # Match SD U-Net block dimensions
-        for sd_ch in sd_channels:
-            # Find closest matching encoder channel
-            zero_conv = ZeroConv(current_channels, sd_ch)
+        # Create one zero conv per encoder output, matching actual channel counts
+        # Match encoder features to SD U-Net blocks by selecting at appropriate scales
+        num_zero_convs = min(len(self.encoder_channels), len(sd_channels))
+        for i in range(num_zero_convs):
+            enc_ch = self.encoder_channels[i]
+            sd_ch = sd_channels[i]
+            zero_conv = ZeroConv(enc_ch, sd_ch)
             self.zero_convs.append(zero_conv)
 
-        # Middle block
+        # Middle block (disable attention to avoid OOM)
         self.middle_block = nn.Sequential(
-            ControlNetBlock(current_channels, current_channels, stride=1, use_attention=True),
+            ControlNetBlock(current_channels, current_channels, stride=1, use_attention=False),
             ControlNetBlock(current_channels, current_channels, stride=1, use_attention=False),
         )
 
