@@ -102,7 +102,7 @@ class ControlNetAdapter(nn.Module):
         base_channels: int = 64,
         channel_mult: Tuple[int, ...] = (1, 2, 4, 8),
         num_res_blocks: int = 2,
-        attention_resolutions: Tuple[int, ...] = (4, 2, 1),
+        attention_resolutions: Tuple[int, ...] = (),  # FIXED: Disable attention to avoid OOM
         sd_channels: Tuple[int, ...] = (320, 640, 1280, 1280),
     ):
         """
@@ -113,7 +113,9 @@ class ControlNetAdapter(nn.Module):
             base_channels: Base number of channels
             channel_mult: Channel multipliers for each resolution
             num_res_blocks: Number of residual blocks per resolution
-            attention_resolutions: Resolutions at which to use attention
+            attention_resolutions: Resolutions at which to use attention (2^i values)
+                                  Default: () disables attention to avoid OOM on 512x512 images
+                                  For 512x512 images, safe values: (8,) for 64x64 resolution only
             sd_channels: Channel dimensions of SD U-Net blocks for zero conv matching
         """
         super().__init__()
