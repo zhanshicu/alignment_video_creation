@@ -9,6 +9,7 @@ Key Features:
 - Fast inference - 2-3s per frame
 - Simple API - easy to use
 - Flexible control - adjust via text instructions
+- Direct video manipulation - edit specific scenes in videos
 """
 
 from .zero_shot_manipulator import (
@@ -24,9 +25,15 @@ from .temporal_smoother import (
     create_crossfade,
 )
 
+from .video_processor import VideoProcessor
+
+from .scene_manipulator import SceneManipulator
+
 __version__ = "1.0.0"
 __all__ = [
+    "SceneManipulator",
     "ZeroShotAlignmentManipulator",
+    "VideoProcessor",
     "TemporalSmoother",
     "load_scenes_from_paths",
     "load_masks_from_paths",
