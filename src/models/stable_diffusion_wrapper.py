@@ -100,10 +100,35 @@ class StableDiffusionControlNetWrapper(nn.Module):
                 param.requires_grad = False
 
     def _add_lora_layers(self, rank: int):
-        """Add LoRA layers to U-Net (optional)."""
-        # Placeholder for LoRA implementation
-        # Would use peft library in practice
-        pass
+        """Add LoRA layers to U-Net attention layers."""
+        try:
+            from peft import LoraConfig, get_peft_model
+
+            print(f"Adding LoRA layers to U-Net (rank={rank})...")
+
+            # Configure LoRA for U-Net attention layers
+            lora_config = LoraConfig(
+                r=rank,  # Rank of LoRA matrices
+                lora_alpha=rank,  # Scaling factor
+                target_modules=[
+                    "to_q", "to_k", "to_v", "to_out.0",  # Attention layers
+                ],
+                lora_dropout=0.0,
+                bias="none",
+            )
+
+            # Apply LoRA to U-Net
+            self.unet = get_peft_model(self.unet, lora_config)
+            self.unet.print_trainable_parameters()
+
+            print("✓ LoRA layers added successfully")
+
+        except ImportError:
+            print("⚠ Warning: peft library not installed. Installing...")
+            import subprocess
+            subprocess.check_call(["pip", "install", "-q", "peft"])
+            print("✓ peft installed. Please restart and try again.")
+            raise RuntimeError("Please restart the notebook/script after installing peft")
 
     def encode_text(self, prompts: Union[str, List[str]]) -> torch.Tensor:
         """
