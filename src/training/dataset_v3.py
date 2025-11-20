@@ -145,12 +145,14 @@ class VideoSceneDatasetV3(Dataset):
 
         return {
             'image': image,
-            'control': control_tensor,
+            'control_tensor': control_tensor,  # Trainer expects 'control_tensor'
+            'control': control_tensor,  # Keep for backward compatibility
             'keyword_mask': keyword_mask,
             'background_mask': background_mask,
             'attention_heatmap': attention_heatmap,
             'alignment_score': alignment_score,
-            'keyword': keyword,
+            'keyword_text': keyword,  # Trainer expects 'keyword_text'
+            'keyword': keyword,  # Keep for backward compatibility
             'video_id': video_id,
             'scene_number': scene_number,
         }
