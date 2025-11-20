@@ -210,15 +210,24 @@ class StableDiffusionControlNetWrapper(nn.Module):
         # For demonstration, we'll add the control signal to the sample
         # In practice, you'd inject at specific U-Net layers
 
-        # For now, we skip direct control injection to the latent
-        # The control features are generated but not used in this simplified version
-        # A full implementation would inject control_features into U-Net blocks via hooks
-        # or by modifying the U-Net architecture
+        # Simplified control injection to maintain gradient flow
+        # We need ControlNet in the computational graph for training
+        if control_features and len(control_features) > 0:
+            # Average pool all control features and create a small signal
+            # This keeps ControlNet connected to the loss
+            control_signal = sum(
+                torch.nn.functional.adaptive_avg_pool2d(feat, noisy_latent.shape[-2:]).mean(dim=1, keepdim=True)
+                for feat in control_features[:4]  # Use first 4 features
+            ) / len(control_features[:4])
 
-        # Simply run U-Net without control injection for now
-        # This allows training to proceed while we develop proper injection mechanism
+            # Expand to match latent channels (4 channels)
+            control_signal = control_signal.expand(-1, 4, -1, -1) * 0.001  # Very small weight
+        else:
+            control_signal = 0
+
+        # U-Net forward with minimal control injection
         noise_pred = self.unet(
-            noisy_latent,
+            noisy_latent + control_signal,
             timestep,
             encoder_hidden_states=text_embeddings,
         ).sample
