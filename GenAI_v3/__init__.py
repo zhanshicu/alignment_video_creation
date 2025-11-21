@@ -1,43 +1,28 @@
 """
-GenAI v3: Zero-Shot Attention-Keyword Alignment Manipulation
+GenAI v3: Zero-Shot Background Manipulation for Attention Control
 
-No training required! Uses pre-trained generative models (InstructPix2Pix,
-Stable Diffusion Inpainting) to manipulate attention-keyword alignment.
+No training required! Uses SOTA pre-trained models (SDXL Inpainting)
+to manipulate BACKGROUND to control attention on product.
 
-Key Features:
-- Zero training - immediate results
-- Fast inference - 2-3s per frame
-- Simple API - easy to use
-- Flexible control - adjust via text instructions
-- Direct video manipulation - edit specific scenes in videos
+Key Concept:
+- Product stays UNCHANGED (authentic)
+- Background is modified to increase/decrease attention on product
+- "increase": Make background less distracting → attention on product
+- "decrease": Make background more interesting → attention diverts
+
+Usage:
+    from GenAI_v3 import SceneManipulator
+
+    manipulator = SceneManipulator()
+
+    output = manipulator.manipulate(
+        video_id="123456",
+        scene_index=6,
+        action="increase",
+    )
 """
-
-from .zero_shot_manipulator import (
-    ZeroShotAlignmentManipulator,
-    load_scenes_from_paths,
-    load_masks_from_paths,
-    save_scenes,
-)
-
-from .temporal_smoother import (
-    TemporalSmoother,
-    apply_temporal_consistency_filter,
-    create_crossfade,
-)
-
-from .video_processor import VideoProcessor
 
 from .scene_manipulator import SceneManipulator
 
-__version__ = "1.0.0"
-__all__ = [
-    "SceneManipulator",
-    "ZeroShotAlignmentManipulator",
-    "VideoProcessor",
-    "TemporalSmoother",
-    "load_scenes_from_paths",
-    "load_masks_from_paths",
-    "save_scenes",
-    "apply_temporal_consistency_filter",
-    "create_crossfade",
-]
+__version__ = "2.0.0"
+__all__ = ["SceneManipulator"]
