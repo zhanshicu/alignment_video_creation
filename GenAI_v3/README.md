@@ -1,121 +1,147 @@
-# GenAI v3: Full Scene Background Manipulation
+# GenAI v3: Consistent Video Background Manipulation
 
-**Zero training required!** Manipulates ENTIRE SCENES with DRAMATIC background changes.
+**Zero training required! No frame-by-frame inconsistency!**
 
-## Key Features
+## Key Innovation
 
-- **FULL SCENE manipulation** - Not just single frames! Uses PySceneDetect
-- **DRAMATIC changes** - Solid gray or psychedelic backgrounds
-- **Auto-detects main product** using SAM + DINO episodic memory
-- **Smooth video output** - Keyframe interpolation, no static images
-- **Dual output** - Returns both video path AND frame path
-- Uses **SDXL Inpainting** (state-of-the-art)
+**The Problem**: Frame-by-frame SDXL manipulation creates inconsistent, flickering backgrounds.
 
-## How It Works
+**The Solution**: Generate ONE background, apply to ALL frames → perfectly consistent video.
 
-1. **Load video** with all frames
-2. **PySceneDetect** finds real scene boundaries
-3. **SAM + DINO** auto-detect main product (episodic memory)
-4. **Manipulate keyframes** across entire scene with SDXL
-5. **Interpolate** between keyframes for smooth video
-6. **Composite** - Keep product from original, use manipulated background
-7. **Export** both video and sample frame
+## Features
+
+- **CONSISTENT background** across all frames (no flicker!)
+- **Video-native APIs**: Google Veo (Colab), Runway, or local SDXL
+- **Product AUTO-DETECTED** using SAM + DINO episodic memory
+- **PySceneDetect** for real scene boundaries
+- **Outputs both** video AND frame
+
+## Backends
+
+| Backend | Best For | Description |
+|---------|----------|-------------|
+| `"google"` | Google Colab | Uses Vertex AI (Imagen/Veo) |
+| `"runway"` | Runway users | Uses Runway Gen-3 API |
+| `"consistent"` | Local GPU | Single SDXL generation |
+| `"auto"` | Default | Tries Google, falls back to consistent |
 
 ## Quick Start
 
+### On Google Colab (Recommended)
+
 ```python
+# Authenticate
+from google.colab import auth
+auth.authenticate_user()
+
 from GenAI_v3 import SceneManipulator
 
-# Initialize (loads SDXL + SAM + DINO + PySceneDetect)
-manipulator = SceneManipulator()
+# Initialize with Google backend
+manipulator = SceneManipulator(
+    video_dir="data/data_tiktok",
+    backend="google",
+)
 
-# Increase attention on auto-detected product
+# Manipulate scene
 result = manipulator.manipulate(
     video_id="123456",
     scene_index=6,
     action="increase",
 )
 
-# Both video and frame are output!
-print(result.video_path)        # Full manipulated video
-print(result.frame_path)        # Sample frame
-print(result.frames_manipulated) # How many frames changed
+print(result.video_path)  # Consistent video
+print(result.frame_path)  # Sample frame
 ```
 
-## Parameters
+### Local GPU
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| `video_id` | Video ID | Required |
-| `scene_index` | Scene number (1-indexed) | Required |
-| `action` | `"increase"` or `"decrease"` | Required |
-| `strength` | 0.0-1.0 (higher = more dramatic) | 0.95 |
-| `num_inference_steps` | Quality (30-50) | 40 |
-| `keyframe_interval` | Process every Nth frame | 10 |
-| `use_keyword_mask` | Force use of keyword mask | False |
+```python
+from GenAI_v3 import SceneManipulator
+
+manipulator = SceneManipulator(
+    video_dir="data/data_tiktok",
+    backend="consistent",  # Single SDXL generation
+    device="cuda",
+)
+
+result = manipulator.manipulate(
+    video_id="123456",
+    scene_index=6,
+    action="increase",
+)
+```
+
+## How It Works
+
+1. **Load video** and detect scenes (PySceneDetect)
+2. **Auto-detect product** using SAM + DINO episodic memory
+3. **Generate ONE background** from reference frame
+4. **Apply SAME background** to ALL frames in scene
+5. **Composite**: Product from original + Generated background
+6. **Export** video and sample frame
 
 ## Actions
 
-- **`"increase"`**: Background → **SOLID GRAY/PLAIN** → all attention on product
-- **`"decrease"`**: Background → **VIBRANT/PSYCHEDELIC** → attention diverts
+- **`"increase"`**: Background → **SOLID GRAY** → all attention on product
+- **`"decrease"`**: Background → **VIBRANT/COLORFUL** → attention diverts
+
+## Why This Approach?
+
+### Consistency
+- Old: Frame-by-frame generation = flickering, inconsistent
+- New: Single generation = perfectly consistent background
+
+### Speed
+- Old: 30 frames = 30 SDXL runs (~5+ minutes)
+- New: 1 SDXL run (~30 seconds)
+
+### Product Preservation
+- Product pixels come from ORIGINAL frames
+- Only background is changed
+- 100% authentic product appearance
+
+## Dependencies
+
+```bash
+# Core
+pip install torch diffusers transformers opencv-python pandas pillow
+
+# Scene detection
+pip install scenedetect[opencv]
+
+# Product detection (optional)
+pip install segment-anything
+
+# Google Colab backend
+pip install google-cloud-aiplatform
+
+# Runway backend (optional)
+pip install runwayml
+```
 
 ## Output Structure
 
 ```
 outputs/genai_v3/
-├── videos/                           # Full manipulated videos
+├── videos/
 │   └── {video_id}_scene{N}_{action}.mp4
-└── frames/                           # Sample frames
+└── frames/
     └── {video_id}_scene{N}_{action}.png
 ```
 
-## Data Structure
-
-```
-data/
-├── data_tiktok/           # Original videos
-│   └── {video_id}.mp4     # ← Required
-└── valid_scenes.csv       # Optional (for keyword masks)
-```
-
-**Note**: Keyword masks are OPTIONAL. Product is auto-detected!
-
-## Dependencies
-
-```bash
-pip install torch diffusers transformers
-pip install segment-anything  # SAM
-pip install scenedetect[opencv]  # PySceneDetect
-pip install opencv-python pandas pillow
-```
-
-## Models
-
-| Model | Purpose | Size |
-|-------|---------|------|
-| **SDXL Inpainting** | Background editing | ~7GB |
-| **SAM ViT-H** | Object segmentation | ~2.5GB |
-| **DINOv2** | Feature tracking | ~350MB |
-
 ## Performance
 
-- **~2-5 min per scene** (depends on scene length)
-- **~12-15GB GPU memory** peak
-- **No training!**
+| Backend | Time/Scene | GPU Memory |
+|---------|------------|------------|
+| Google | ~10-30s | N/A (cloud) |
+| Consistent | ~30s | ~10GB |
+| Runway | ~20-40s | N/A (cloud) |
 
-## Why This Approach?
+## Comparison
 
-### Full Scene Manipulation
-- Single frame insertion looks fake (static image in video)
-- PySceneDetect finds real scene cuts
-- Keyframe interpolation creates smooth transitions
-
-### Dramatic Changes
-- Subtle changes don't affect attention
-- Solid gray vs psychedelic is clearly different
-- A/B testing needs visible contrast
-
-### Auto-Detection
-- Keywords can be unreliable
-- Episodic memory tracks consistent elements
-- No manual labeling required
+| Feature | Old (Frame-by-frame) | New (Consistent) |
+|---------|---------------------|------------------|
+| Background | Inconsistent | Perfectly consistent |
+| Speed | Slow (N×SDXL) | Fast (1×SDXL) |
+| Product | May vary | 100% original |
+| Flicker | Yes | No |
