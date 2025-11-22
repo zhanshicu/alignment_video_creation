@@ -1,11 +1,13 @@
 """
-GenAI v3: Zero-Shot Background Manipulation for Attention Control
+GenAI v3: Automatic Background Manipulation for Attention Control
 
-No training required! Uses SOTA pre-trained models (SDXL Inpainting)
-to manipulate BACKGROUND to control attention on product.
+No training required! Uses SOTA pre-trained models:
+- SDXL Inpainting for background manipulation
+- SAM (Segment Anything) + DINO for automatic product detection
 
 Key Concept:
-- Product stays UNCHANGED (authentic)
+- Product is AUTO-DETECTED using episodic memory (SAM + DINO)
+- No keyword mask required!
 - Background is modified to increase/decrease attention on product
 - "increase": Make background less distracting → attention on product
 - "decrease": Make background more interesting → attention diverts
@@ -24,5 +26,10 @@ Usage:
 
 from .scene_manipulator import SceneManipulator
 
-__version__ = "2.0.0"
-__all__ = ["SceneManipulator"]
+try:
+    from .product_detector import MainProductDetector
+except ImportError:
+    MainProductDetector = None
+
+__version__ = "3.0.0"
+__all__ = ["SceneManipulator", "MainProductDetector"]

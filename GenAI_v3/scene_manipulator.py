@@ -1,11 +1,12 @@
 """
-Scene Manipulator - Simple Background Manipulation
+Scene Manipulator - Automatic Background Manipulation
 
 Manipulate BACKGROUND (not product) to control attention-keyword alignment.
 Uses SOTA pre-trained models (SDXL Inpainting).
 
 Key Concept:
-- Product stays UNCHANGED (authentic)
+- Product is AUTO-DETECTED (no keyword mask needed!)
+- Uses SAM + DINO for episodic memory across video frames
 - Background is modified to draw/deflect attention
 - "increase" → Make background less distracting (muted, blurred)
 - "decrease" → Make background more attention-grabbing (vibrant, detailed)
@@ -43,6 +44,7 @@ class SceneManipulator:
         video_dir: str = "data/data_tiktok",
         output_dir: str = "outputs/genai_v3/manipulated_videos",
         device: str = "cuda",
+        auto_detect_product: bool = True,
     ):
         """
         Initialize scene manipulator.
@@ -52,21 +54,40 @@ class SceneManipulator:
             video_dir: Directory containing videos ({video_id}.mp4)
             output_dir: Directory for output videos
             device: "cuda" or "cpu"
+            auto_detect_product: If True, automatically detect main product
+                                 using SAM + DINO (no keyword mask needed)
         """
         self.valid_scenes_file = Path(valid_scenes_file)
         self.video_dir = Path(video_dir)
         self.output_dir = Path(output_dir)
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.device = device
+        self.auto_detect_product = auto_detect_product
 
-        # Load valid scenes
-        self.scenes_df = pd.read_csv(valid_scenes_file)
-        print(f"✓ Loaded {len(self.scenes_df)} valid scenes")
+        # Load valid scenes (optional - only needed if using keyword masks)
+        if valid_scenes_file and Path(valid_scenes_file).exists():
+            self.scenes_df = pd.read_csv(valid_scenes_file)
+            print(f"✓ Loaded {len(self.scenes_df)} valid scenes")
+        else:
+            self.scenes_df = None
+            print("✓ Running without valid_scenes.csv (will auto-detect products)")
 
-        # Initialize SOTA model
+        # Initialize SOTA inpainting model
         print("Loading SDXL Inpainting model (SOTA)...")
         self._load_model()
-        print("✓ Model loaded")
+        print("✓ SDXL loaded")
+
+        # Initialize product detector (if auto-detect enabled)
+        self.product_detector = None
+        if auto_detect_product:
+            print("Loading product detector (SAM + DINO)...")
+            try:
+                from .product_detector import MainProductDetector
+                self.product_detector = MainProductDetector(device=device)
+                print("✓ Product detector loaded")
+            except Exception as e:
+                print(f"⚠ Product detector not available: {e}")
+                print("  Will fall back to keyword masks or saliency detection")
 
     def _load_model(self):
         """Load SOTA inpainting model (SDXL)."""
@@ -97,11 +118,13 @@ class SceneManipulator:
         strength: float = 0.8,
         num_inference_steps: int = 30,
         output_path: Optional[str] = None,
+        use_keyword_mask: bool = False,
     ) -> str:
         """
         Manipulate a specific scene and replace it in the video.
 
         Modifies BACKGROUND only - product stays unchanged.
+        Product is AUTO-DETECTED using episodic memory (SAM + DINO).
 
         Args:
             video_id: Video identifier
@@ -112,6 +135,8 @@ class SceneManipulator:
             strength: Manipulation strength (0.0-1.0, higher = stronger effect)
             num_inference_steps: Quality setting (20-50)
             output_path: Custom output path (auto-generated if None)
+            use_keyword_mask: If True, use keyword mask instead of auto-detection
+                             (requires valid_scenes.csv with mask paths)
 
         Returns:
             Path to the output video
@@ -122,45 +147,66 @@ class SceneManipulator:
         print(f"Method: Edit BACKGROUND only (product unchanged)")
         print(f"{'='*60}\n")
 
-        # Step 1: Load scene info
-        scene_info = self._get_scene_info(video_id, scene_index)
-        keyword = scene_info['keyword']
-        print(f"Keyword/Product: '{keyword}'")
+        # Step 1: Load original video first (needed for auto-detection)
+        print(f"Loading original video...")
+        video_frames, fps = self._load_video(video_id)
+        print(f"✓ Loaded {len(video_frames)} frames @ {fps:.1f} fps")
 
-        # Step 2: Load scene image and keyword mask
-        scene_image = Image.open(scene_info['scene_image_path']).convert('RGB')
-        keyword_mask = self._load_mask(scene_info['keyword_mask_path'])
+        # Step 2: Get scene frame range
+        start_frame, end_frame = self._get_scene_frame_range(
+            video_id, scene_index, len(video_frames)
+        )
+        print(f"Scene {scene_index}: frames {start_frame}-{end_frame}")
+
+        # Step 3: Get representative frame for manipulation
+        mid_frame_idx = (start_frame + end_frame) // 2
+        scene_frame = video_frames[mid_frame_idx]
+        scene_image = Image.fromarray(scene_frame)
+
+        # Step 4: Get product mask (auto-detect or keyword mask)
+        if use_keyword_mask and self.scenes_df is not None:
+            # Use existing keyword mask
+            scene_info = self._get_scene_info(video_id, scene_index)
+            keyword_mask = self._load_mask(scene_info['keyword_mask_path'])
+            print(f"✓ Using keyword mask: '{scene_info.get('keyword', 'unknown')}'")
+        elif self.product_detector is not None:
+            # AUTO-DETECT product using episodic memory
+            print(f"\nAuto-detecting main product across video...")
+            keyword_mask = self.product_detector.detect_main_product(
+                video_frames,
+                num_sample_frames=5,
+            )
+            # Resize mask to match scene frame
+            keyword_mask = cv2.resize(
+                keyword_mask,
+                (scene_frame.shape[1], scene_frame.shape[0]),
+                interpolation=cv2.INTER_NEAREST
+            )
+            print(f"✓ Auto-detected main product")
+        else:
+            # Fallback: Use saliency detection on single frame
+            print(f"\n⚠ Using saliency fallback (no SAM available)")
+            keyword_mask = self._saliency_detect(scene_frame)
 
         # IMPORTANT: Invert mask - we want to edit BACKGROUND, not product
         background_mask = 1.0 - keyword_mask
 
-        print(f"✓ Loaded scene image and masks")
         print(f"  Product region: {keyword_mask.sum() / keyword_mask.size * 100:.1f}% of image")
         print(f"  Background region: {background_mask.sum() / background_mask.size * 100:.1f}% of image")
 
-        # Step 3: Manipulate background
+        # Step 5: Manipulate background
         print(f"\nManipulating background ({action})...")
         manipulated_scene = self._manipulate_background(
             image=scene_image,
             background_mask=background_mask,
-            keyword=keyword,
             action=action,
             strength=strength,
             num_inference_steps=num_inference_steps,
         )
         print(f"✓ Background manipulation complete")
 
-        # Step 4: Load original video
-        print(f"\nLoading original video...")
-        video_frames, fps = self._load_video(video_id)
-        print(f"✓ Loaded {len(video_frames)} frames @ {fps:.1f} fps")
-
-        # Step 5: Find scene location and replace
+        # Step 6: Replace scene in video
         print(f"\nReplacing scene in video...")
-        start_frame, end_frame = self._get_scene_frame_range(
-            video_id, scene_index, len(video_frames)
-        )
-
         edited_frames = self._replace_scene(
             video_frames=video_frames,
             start_frame=start_frame,
@@ -186,11 +232,33 @@ class SceneManipulator:
 
         return str(output_path)
 
+    def _saliency_detect(self, frame: np.ndarray) -> np.ndarray:
+        """Fallback: Detect main content using saliency."""
+        saliency = cv2.saliency.StaticSaliencySpectralResidual_create()
+        success, saliency_map = saliency.computeSaliency(frame)
+
+        if not success:
+            # Last resort: center prior
+            h, w = frame.shape[:2]
+            y, x = np.ogrid[:h, :w]
+            center_prior = np.exp(-((x - w/2)**2 / (0.3*w)**2 + (y - h/2)**2 / (0.3*h)**2))
+            return (center_prior > 0.5).astype(np.float32)
+
+        # Threshold
+        threshold = np.percentile(saliency_map, 70)
+        mask = (saliency_map > threshold).astype(np.float32)
+
+        # Clean up
+        kernel = np.ones((15, 15), np.uint8)
+        mask = cv2.morphologyEx(mask.astype(np.uint8), cv2.MORPH_CLOSE, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+
+        return mask.astype(np.float32)
+
     def _manipulate_background(
         self,
         image: Image.Image,
         background_mask: np.ndarray,
-        keyword: str,
         action: str,
         strength: float,
         num_inference_steps: int,

@@ -1,30 +1,37 @@
-# GenAI v3: Background Manipulation for Attention Control
+# GenAI v3: Automatic Background Manipulation
 
-**Zero training required!** Uses SDXL (SOTA) to manipulate backgrounds and control attention.
+**Zero training required!** Uses SOTA models for automatic product detection and background manipulation.
 
-## Key Concept
+## Key Features
 
-- **Product stays UNCHANGED** (authentic)
-- **Background is modified** to control viewer attention
-- `increase`: Muted background → more attention on product
-- `decrease`: Vibrant background → less attention on product
+- **Auto-detects main product** using SAM + DINO (no keyword mask needed!)
+- **Episodic memory** - Tracks consistent elements across video frames
+- **Background only modified** - Product stays authentic
+- Uses **SDXL Inpainting** (state-of-the-art)
+
+## How It Works
+
+1. **Sample frames** across the video
+2. **SAM** segments all objects in each frame
+3. **DINO** tracks which segments appear consistently (episodic memory)
+4. **Main product** = most frequent, prominent, consistent element
+5. **Invert mask** → select background only
+6. **SDXL** inpaints background to control attention
 
 ## Quick Start
 
 ```python
 from GenAI_v3 import SceneManipulator
 
-# Initialize (loads SDXL, ~10GB)
+# Initialize (loads SDXL + SAM + DINO)
 manipulator = SceneManipulator()
 
-# Increase attention on product in scene 6
+# Increase attention on auto-detected product
 output = manipulator.manipulate(
     video_id="123456",
     scene_index=6,
     action="increase",
 )
-
-# Output: outputs/genai_v3/123456_scene6_increase.mp4
 ```
 
 ## Parameters
@@ -35,41 +42,41 @@ output = manipulator.manipulate(
 | `scene_index` | Scene number (1-indexed) | Required |
 | `action` | `"increase"` or `"decrease"` | Required |
 | `strength` | 0.0-1.0 (higher = stronger) | 0.8 |
-| `num_inference_steps` | Quality (20-50) | 30 |
+| `use_keyword_mask` | Force use of keyword mask | False |
+
+## Actions
+
+- **`"increase"`**: Muted background → attention on product
+- **`"decrease"`**: Vibrant background → attention diverts
 
 ## Data Structure
 
 ```
 data/
 ├── data_tiktok/           # Original videos
-│   └── {video_id}.mp4
-├── video_scene_cuts/      # Scene images
-│   └── {video_id}/
-│       └── {video_id}-Scene-0xx-01.jpg
-├── keyword_masks/         # Product masks
-│   └── {video_id}/
-│       └── scene_{x}.png
-└── valid_scenes.csv       # Scene metadata
+│   └── {video_id}.mp4     # ← Required
+└── valid_scenes.csv       # Optional (for keyword masks)
 ```
 
-## How It Works
+**Note**: Keyword masks are OPTIONAL. Product is auto-detected!
 
-1. Load scene image and keyword mask
-2. **Invert mask** → select background only
-3. SDXL inpainting on background:
-   - `increase`: "simple, muted, out of focus background"
-   - `decrease`: "vibrant, colorful, detailed background"
-4. Replace scene in video with smooth blending
-5. Export edited video
+## Models
+
+| Model | Purpose | Size |
+|-------|---------|------|
+| **SDXL Inpainting** | Background editing | ~7GB |
+| **SAM ViT-H** | Object segmentation | ~2.5GB |
+| **DINOv2** | Feature tracking | ~350MB |
 
 ## Performance
 
-- ~30-40s per scene
-- ~10GB GPU memory
+- ~60s per scene (including auto-detection)
+- ~12GB GPU memory peak
 - No training!
 
-## Why Background Manipulation?
+## Why Auto-Detection?
 
-- **Product authenticity**: No fake edits to the product
-- **Attention control**: Background affects where viewers look
-- **Clean A/B testing**: Same product, different context
+- **Keywords can be unreliable** - CLIPSeg might miss the actual product
+- **Episodic memory** - Tracks what appears consistently
+- **No manual labeling** - Works out of the box
+- **More robust** - Finds the actual main content
