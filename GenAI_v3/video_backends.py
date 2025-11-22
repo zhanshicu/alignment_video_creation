@@ -5,9 +5,9 @@ Provides consistent video-level manipulation using cloud APIs.
 Much better quality and consistency than frame-by-frame SDXL.
 
 Supported backends:
-- Google Veo (via Vertex AI) - Recommended for Colab
+- Google Veo 3.1 (via google-genai) - Recommended for Colab
 - Runway Gen-3 (via API)
-- Fallback: Frame-by-frame (legacy)
+- Fallback: Consistent SDXL (local)
 """
 
 import os
@@ -15,7 +15,7 @@ import tempfile
 import time
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Optional, Literal
+from typing import Optional, Literal, List
 import numpy as np
 import cv2
 from PIL import Image
@@ -27,11 +27,11 @@ class VideoBackend(ABC):
     @abstractmethod
     def manipulate_video_segment(
         self,
-        video_segment: list,  # List of frames (np.ndarray)
-        mask: np.ndarray,     # Binary mask (product=1, background=0)
+        video_segment: List[np.ndarray],
+        mask: np.ndarray,
         action: Literal["increase", "decrease"],
         fps: float,
-    ) -> list:
+    ) -> List[np.ndarray]:
         """
         Manipulate an entire video segment consistently.
 
@@ -49,245 +49,288 @@ class VideoBackend(ABC):
 
 class GoogleVeoBackend(VideoBackend):
     """
-    Google Veo 3.1 backend via Vertex AI.
+    Google Veo 3.1 backend via google-genai.
 
-    Provides consistent video-level manipulation using Google's
-    state-of-the-art video generation model.
+    Uses Google's state-of-the-art video generation model for
+    consistent video manipulation.
 
     Requires:
-        - Google Cloud project with Vertex AI enabled
-        - Authentication (automatic on Colab, or via service account)
+        pip install google-genai
 
     Setup on Colab:
         from google.colab import auth
         auth.authenticate_user()
     """
 
-    def __init__(
-        self,
-        project_id: Optional[str] = None,
-        location: str = "us-central1",
-    ):
+    def __init__(self, api_key: Optional[str] = None):
         """
         Initialize Google Veo backend.
 
         Args:
-            project_id: Google Cloud project ID (auto-detected on Colab)
-            location: Vertex AI location
+            api_key: Google API key (optional, uses default auth on Colab)
         """
-        self.project_id = project_id or self._get_project_id()
-        self.location = location
+        self.api_key = api_key
         self._init_client()
 
-    def _get_project_id(self) -> str:
-        """Auto-detect project ID."""
-        # Try environment variable
-        project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        if project_id:
-            return project_id
-
-        # Try Colab
-        try:
-            from google.colab import auth
-            import google.auth
-            _, project = google.auth.default()
-            if project:
-                return project
-        except:
-            pass
-
-        raise ValueError(
-            "Could not detect Google Cloud project ID. "
-            "Set GOOGLE_CLOUD_PROJECT env var or pass project_id explicitly."
-        )
-
     def _init_client(self):
-        """Initialize Vertex AI client."""
+        """Initialize Google GenAI client."""
         try:
-            import vertexai
-            from vertexai.preview.vision_models import ImageGenerationModel
+            from google import genai
 
-            vertexai.init(project=self.project_id, location=self.location)
+            if self.api_key:
+                self.client = genai.Client(api_key=self.api_key)
+            else:
+                # Uses default credentials (works on Colab after auth)
+                self.client = genai.Client()
 
-            # Note: Veo API access may require allowlisting
-            # Using Imagen for image-based approach as fallback
-            self.imagen_model = ImageGenerationModel.from_pretrained("imagen-3.0-generate-001")
-            print(f"✓ Initialized Google Vertex AI (project: {self.project_id})")
+            print("✓ Initialized Google GenAI client (Veo 3.1)")
 
         except ImportError:
             raise ImportError(
-                "google-cloud-aiplatform required. Install: "
-                "pip install google-cloud-aiplatform"
+                "google-genai required. Install: pip install google-genai"
             )
 
     def manipulate_video_segment(
         self,
-        video_segment: list,
+        video_segment: List[np.ndarray],
         mask: np.ndarray,
         action: Literal["increase", "decrease"],
         fps: float,
-    ) -> list:
+    ) -> List[np.ndarray]:
         """
-        Manipulate video using Google's video editing API.
+        Manipulate video using Google Veo 3.1.
 
-        Uses Veo for video-native editing when available,
-        falls back to Imagen with temporal consistency for images.
+        Strategy:
+        1. Take reference frame from video
+        2. Generate new background using Gemini image generation
+        3. Generate video from that image using Veo 3.1
+        4. Extract frames and composite with original product
         """
-        print(f"  Using Google Veo/Imagen for {len(video_segment)} frames...")
+        print(f"  Using Google Veo 3.1 for {len(video_segment)} frames...")
 
-        # Get prompt based on action
-        prompt = self._get_prompt(action)
-
-        # Try video-native API first (Veo)
-        try:
-            return self._manipulate_with_veo(video_segment, mask, prompt, fps)
-        except Exception as e:
-            print(f"  Veo unavailable ({e}), using Imagen with consistency...")
-            return self._manipulate_with_imagen_consistent(video_segment, mask, prompt)
-
-    def _get_prompt(self, action: str) -> str:
-        """Get manipulation prompt based on action."""
-        if action == "increase":
-            return (
-                "Replace the background with a completely plain, solid neutral gray "
-                "studio backdrop. The background should be extremely simple, flat, "
-                "and featureless - like a professional product photography background. "
-                "No patterns, no textures, no gradients - just uniform gray."
-            )
-        else:  # decrease
-            return (
-                "Replace the background with an extremely vibrant, colorful, and "
-                "eye-catching environment. Add bold colors, interesting patterns, "
-                "dynamic lighting effects, and visually engaging elements that "
-                "draw attention away from the center. Make it visually exciting."
-            )
-
-    def _manipulate_with_veo(
-        self,
-        video_segment: list,
-        mask: np.ndarray,
-        prompt: str,
-        fps: float,
-    ) -> list:
-        """Use Veo for video-native manipulation."""
-        from vertexai.preview.generative_models import GenerativeModel
-
-        # Save video segment to temp file
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-            temp_video_path = f.name
-
-        h, w = video_segment[0].shape[:2]
-        writer = cv2.VideoWriter(
-            temp_video_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
-            fps,
-            (w, h)
-        )
-        for frame in video_segment:
-            writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-        writer.release()
-
-        # Save mask
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            mask_path = f.name
-        mask_img = (mask * 255).astype(np.uint8)
-        cv2.imwrite(mask_path, mask_img)
-
-        # Call Veo API
-        try:
-            model = GenerativeModel("veo-001")  # or veo-3.1 when available
-
-            # Note: Actual Veo API may differ - this is illustrative
-            # The real API would use video inpainting endpoints
-            response = model.generate_content([
-                f"Edit this video: {prompt}",
-                # Video and mask would be attached here
-            ])
-
-            # Parse response and extract frames
-            # (Implementation depends on actual Veo API response format)
-
-        finally:
-            os.unlink(temp_video_path)
-            os.unlink(mask_path)
-
-        raise NotImplementedError("Veo video inpainting API not yet publicly available")
-
-    def _manipulate_with_imagen_consistent(
-        self,
-        video_segment: list,
-        mask: np.ndarray,
-        prompt: str,
-    ) -> list:
-        """
-        Use Imagen with temporal consistency techniques.
-
-        - Generate reference background once
-        - Apply consistently across all frames
-        - Blend using the mask
-        """
-        from vertexai.preview.vision_models import Image as VertexImage
-
-        # Step 1: Generate reference background from first frame
-        first_frame = video_segment[0]
-        h, w = first_frame.shape[:2]
+        # Get reference frame (middle of segment)
+        ref_idx = len(video_segment) // 2
+        ref_frame = video_segment[ref_idx]
+        h, w = ref_frame.shape[:2]
 
         # Resize mask
         mask_resized = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
 
-        # Create background-only image for reference
-        bg_mask = (1 - mask_resized)
-        bg_only = (first_frame * bg_mask[:, :, np.newaxis]).astype(np.uint8)
-
-        # Save to temp file for API
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            temp_path = f.name
-        Image.fromarray(first_frame).save(temp_path)
+        # Get prompt for background generation
+        prompt = self._get_prompt(action)
 
         try:
-            # Generate new background using Imagen
-            source_image = VertexImage.load_from_file(temp_path)
+            # Step 1: Generate background image with Gemini
+            print("  Generating reference background with Gemini...")
+            bg_image = self._generate_background_image(ref_frame, mask_resized, prompt)
 
-            # Use edit_image for inpainting
-            response = self.imagen_model.edit_image(
-                prompt=prompt,
-                base_image=source_image,
-                mask=VertexImage.load_from_file(self._save_mask_temp(1 - mask_resized)),
-                number_of_images=1,
+            # Step 2: Generate video with Veo 3.1 from the background image
+            print("  Generating video with Veo 3.1...")
+            generated_frames = self._generate_video_from_image(
+                bg_image,
+                prompt,
+                target_frames=len(video_segment),
+                fps=fps,
             )
 
-            if response.images:
-                new_bg_image = np.array(response.images[0]._pil_image)
-                # Resize to match
-                new_bg_image = cv2.resize(new_bg_image, (w, h))
-            else:
-                raise RuntimeError("Imagen returned no images")
+            # Step 3: Composite - keep product from original, use generated background
+            print("  Compositing with original product...")
+            result_frames = self._composite_frames(
+                original_frames=video_segment,
+                generated_frames=generated_frames,
+                product_mask=mask_resized,
+            )
+
+            print(f"  ✓ Generated {len(result_frames)} consistent frames")
+            return result_frames
+
+        except Exception as e:
+            print(f"  ⚠ Veo generation failed: {e}")
+            print("  Falling back to consistent background mode...")
+            return self._fallback_consistent(video_segment, mask_resized, action)
+
+    def _get_prompt(self, action: str) -> str:
+        """Get prompt based on action."""
+        if action == "increase":
+            return (
+                "A completely plain, solid neutral gray studio backdrop. "
+                "Extremely simple, flat, featureless background. "
+                "Professional product photography background with no patterns, "
+                "no textures, no gradients - just uniform gray. "
+                "Static camera, no movement."
+            )
+        else:  # decrease
+            return (
+                "An extremely vibrant, colorful, eye-catching background. "
+                "Bold colors, interesting patterns, dynamic lighting effects. "
+                "Visually engaging environment with rich textures. "
+                "Rainbow gradients, neon colors, kaleidoscope patterns. "
+                "Subtle camera movement for dynamic feel."
+            )
+
+    def _generate_background_image(
+        self,
+        ref_frame: np.ndarray,
+        mask: np.ndarray,
+        prompt: str,
+    ) -> Image.Image:
+        """Generate a background image using Gemini."""
+        # Create a version of the frame with masked product
+        # This gives context about the scene
+
+        # Generate image with Gemini
+        response = self.client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            contents=f"Generate an image: {prompt}",
+            config={"response_modalities": ["IMAGE"]}
+        )
+
+        # Extract the generated image
+        if response.candidates and response.candidates[0].content.parts:
+            for part in response.candidates[0].content.parts:
+                if hasattr(part, 'inline_data') and part.inline_data:
+                    import io
+                    image_data = part.inline_data.data
+                    return Image.open(io.BytesIO(image_data))
+
+        raise RuntimeError("Failed to generate background image with Gemini")
+
+    def _generate_video_from_image(
+        self,
+        image: Image.Image,
+        prompt: str,
+        target_frames: int,
+        fps: float,
+    ) -> List[np.ndarray]:
+        """Generate video from image using Veo 3.1."""
+        # Save image to temp file for upload
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
+            temp_path = f.name
+            image.save(temp_path)
+
+        try:
+            # Upload the image
+            from google.genai import types
+
+            # Read image as bytes
+            with open(temp_path, "rb") as f:
+                image_bytes = f.read()
+
+            # Create image part
+            image_part = types.Part.from_bytes(
+                data=image_bytes,
+                mime_type="image/png"
+            )
+
+            # Generate video with Veo 3.1
+            operation = self.client.models.generate_videos(
+                model="veo-3.1-generate-preview",
+                prompt=prompt,
+                image=image_part,
+            )
+
+            # Poll until complete
+            while not operation.done:
+                print("    Waiting for Veo generation...")
+                time.sleep(10)
+                operation = self.client.operations.get(operation)
+
+            # Download the generated video
+            video = operation.response.generated_videos[0]
+
+            # Save to temp file
+            with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
+                video_path = f.name
+                self.client.files.download(file=video.video)
+                video.video.save(video_path)
+
+            # Extract frames from generated video
+            frames = self._extract_frames(video_path, target_frames)
+
+            # Clean up
+            os.unlink(video_path)
+
+            return frames
 
         finally:
             os.unlink(temp_path)
 
-        # Step 2: Apply reference background to all frames consistently
-        result_frames = []
-        mask_3ch = np.stack([mask_resized] * 3, axis=-1)
+    def _extract_frames(self, video_path: str, target_frames: int) -> List[np.ndarray]:
+        """Extract frames from video file."""
+        cap = cv2.VideoCapture(video_path)
+        frames = []
+
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            frames.append(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
+
+        cap.release()
+
+        # Resample to match target frame count
+        if len(frames) != target_frames:
+            indices = np.linspace(0, len(frames) - 1, target_frames, dtype=int)
+            frames = [frames[i] for i in indices]
+
+        return frames
+
+    def _composite_frames(
+        self,
+        original_frames: List[np.ndarray],
+        generated_frames: List[np.ndarray],
+        product_mask: np.ndarray,
+    ) -> List[np.ndarray]:
+        """Composite original product with generated background."""
+        result = []
+        h, w = original_frames[0].shape[:2]
+        mask_3ch = np.stack([product_mask] * 3, axis=-1)
+
+        for orig, gen in zip(original_frames, generated_frames):
+            # Resize generated frame if needed
+            if gen.shape[:2] != (h, w):
+                gen = cv2.resize(gen, (w, h))
+
+            # Composite: product from original, background from generated
+            composite = (
+                mask_3ch * orig.astype(float) +
+                (1 - mask_3ch) * gen.astype(float)
+            ).astype(np.uint8)
+
+            result.append(composite)
+
+        return result
+
+    def _fallback_consistent(
+        self,
+        video_segment: List[np.ndarray],
+        mask: np.ndarray,
+        action: str,
+    ) -> List[np.ndarray]:
+        """Fallback: Generate one background, apply to all frames."""
+        prompt = self._get_prompt(action)
+
+        # Generate single background image
+        ref_frame = video_segment[len(video_segment) // 2]
+        bg_image = self._generate_background_image(ref_frame, mask, prompt)
+        bg_array = np.array(bg_image)
+
+        h, w = ref_frame.shape[:2]
+        if bg_array.shape[:2] != (h, w):
+            bg_array = cv2.resize(bg_array, (w, h))
+
+        # Apply to all frames
+        mask_3ch = np.stack([mask] * 3, axis=-1)
+        result = []
 
         for frame in video_segment:
-            # Composite: keep product, use new background
-            result = (
+            composite = (
                 mask_3ch * frame.astype(float) +
-                (1 - mask_3ch) * new_bg_image.astype(float)
+                (1 - mask_3ch) * bg_array.astype(float)
             ).astype(np.uint8)
-            result_frames.append(result)
+            result.append(composite)
 
-        print(f"  ✓ Applied consistent background to {len(result_frames)} frames")
-        return result_frames
-
-    def _save_mask_temp(self, mask: np.ndarray) -> str:
-        """Save mask to temp file and return path."""
-        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as f:
-            temp_path = f.name
-        mask_img = (mask * 255).astype(np.uint8)
-        cv2.imwrite(temp_path, mask_img)
-        return temp_path
+        return result
 
 
 class RunwayBackend(VideoBackend):
@@ -298,7 +341,7 @@ class RunwayBackend(VideoBackend):
     video generation and editing capabilities.
 
     Requires:
-        - Runway API key
+        pip install runwayml
     """
 
     def __init__(self, api_key: Optional[str] = None):
@@ -329,75 +372,33 @@ class RunwayBackend(VideoBackend):
 
     def manipulate_video_segment(
         self,
-        video_segment: list,
+        video_segment: List[np.ndarray],
         mask: np.ndarray,
         action: Literal["increase", "decrease"],
         fps: float,
-    ) -> list:
+    ) -> List[np.ndarray]:
         """Manipulate video using Runway Gen-3."""
         print(f"  Using Runway Gen-3 for {len(video_segment)} frames...")
 
-        prompt = self._get_prompt(action)
+        # Similar approach: generate background, composite
+        # Implementation depends on Runway's specific API
 
-        # Save video segment
-        with tempfile.NamedTemporaryFile(suffix=".mp4", delete=False) as f:
-            temp_video_path = f.name
-
-        h, w = video_segment[0].shape[:2]
-        writer = cv2.VideoWriter(
-            temp_video_path,
-            cv2.VideoWriter_fourcc(*'mp4v'),
-            fps,
-            (w, h)
+        raise NotImplementedError(
+            "Runway backend not fully implemented. "
+            "Use 'google' or 'consistent' backend instead."
         )
-        for frame in video_segment:
-            writer.write(cv2.cvtColor(frame, cv2.COLOR_RGB2BGR))
-        writer.release()
-
-        try:
-            # Call Runway API for video editing
-            # Note: Actual API may differ
-            task = self.client.video_to_video.create(
-                model="gen3a_turbo",
-                video=temp_video_path,
-                prompt=prompt,
-            )
-
-            # Wait for completion
-            while task.status not in ["SUCCEEDED", "FAILED"]:
-                time.sleep(2)
-                task = self.client.tasks.retrieve(task.id)
-
-            if task.status == "FAILED":
-                raise RuntimeError(f"Runway task failed: {task.failure}")
-
-            # Download result
-            result_url = task.output[0]
-            # Download and extract frames...
-
-        finally:
-            os.unlink(temp_video_path)
-
-        raise NotImplementedError("Full Runway integration pending")
-
-    def _get_prompt(self, action: str) -> str:
-        """Get manipulation prompt."""
-        if action == "increase":
-            return "Change background to plain solid gray studio backdrop"
-        else:
-            return "Change background to vibrant colorful eye-catching environment"
 
 
 class ConsistentBackgroundBackend(VideoBackend):
     """
-    Simple consistent background replacement.
+    Simple consistent background replacement using local SDXL.
 
-    Instead of frame-by-frame generation, this approach:
-    1. Generates ONE reference background image
-    2. Applies it consistently to ALL frames
-    3. No temporal inconsistency!
+    Key insight:
+    - Generate ONE background image
+    - Apply to ALL frames
+    - No temporal inconsistency!
 
-    Uses local SDXL but only once per scene.
+    Uses SDXL only once per scene, not per frame.
     """
 
     def __init__(self, device: str = "cuda"):
@@ -410,7 +411,7 @@ class ConsistentBackgroundBackend(VideoBackend):
         import torch
         from diffusers import AutoPipelineForInpainting
 
-        print("Loading SDXL Inpainting (for single background generation)...")
+        print("Loading SDXL Inpainting (single generation mode)...")
         self.pipe = AutoPipelineForInpainting.from_pretrained(
             "diffusers/stable-diffusion-xl-1.0-inpainting-0.1",
             torch_dtype=torch.float16,
@@ -422,15 +423,15 @@ class ConsistentBackgroundBackend(VideoBackend):
 
     def manipulate_video_segment(
         self,
-        video_segment: list,
+        video_segment: List[np.ndarray],
         mask: np.ndarray,
         action: Literal["increase", "decrease"],
         fps: float,
-    ) -> list:
+    ) -> List[np.ndarray]:
         """
         Apply consistent background to entire video segment.
 
-        Key insight: Generate background ONCE, apply to ALL frames.
+        Key: Generate background ONCE, apply to ALL frames.
         """
         import torch
 
@@ -445,13 +446,13 @@ class ConsistentBackgroundBackend(VideoBackend):
         mask_resized = cv2.resize(mask, (w, h), interpolation=cv2.INTER_NEAREST)
         bg_mask = 1.0 - mask_resized  # Background = 1, product = 0
 
-        # Generate new background using reference frame
+        # Prepare for SDXL
         ref_image = Image.fromarray(ref_frame).resize((1024, 1024), Image.LANCZOS)
-        bg_mask_resized = cv2.resize(bg_mask, (1024, 1024), interpolation=cv2.INTER_NEAREST)
+        bg_mask_1024 = cv2.resize(bg_mask, (1024, 1024), interpolation=cv2.INTER_NEAREST)
 
-        # Expand mask slightly
+        # Expand mask slightly for better blending
         kernel = np.ones((21, 21), np.uint8)
-        bg_mask_expanded = cv2.dilate(bg_mask_resized.astype(np.uint8), kernel, iterations=2)
+        bg_mask_expanded = cv2.dilate(bg_mask_1024.astype(np.uint8), kernel, iterations=2)
         mask_pil = Image.fromarray((bg_mask_expanded * 255).astype(np.uint8))
 
         # Get prompt
@@ -473,7 +474,7 @@ class ConsistentBackgroundBackend(VideoBackend):
             negative = "plain, simple, muted, boring, gray"
             guidance = 15.0
 
-        # Generate ONCE
+        # Generate ONE background
         with torch.no_grad():
             result = self.pipe(
                 prompt=prompt,
@@ -494,7 +495,6 @@ class ConsistentBackgroundBackend(VideoBackend):
         mask_3ch = np.stack([mask_resized] * 3, axis=-1)
 
         for frame in video_segment:
-            # Composite: product from original, background from generated
             composite = (
                 mask_3ch * frame.astype(float) +
                 (1 - mask_3ch) * new_bg.astype(float)
@@ -514,7 +514,7 @@ def get_backend(
 
     Args:
         backend_type:
-            - "google": Google Veo/Imagen via Vertex AI
+            - "google": Google Veo 3.1 via google-genai
             - "runway": Runway Gen-3 API
             - "consistent": Local SDXL with consistent background
             - "auto": Try Google first, fall back to consistent

@@ -112,8 +112,8 @@ pip install scenedetect[opencv]
 # Product detection (optional)
 pip install segment-anything
 
-# Google Colab backend
-pip install google-cloud-aiplatform
+# Google Veo 3.1 backend (recommended)
+pip install -U google-genai
 
 # Runway backend (optional)
 pip install runwayml
